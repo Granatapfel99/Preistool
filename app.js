@@ -1,14 +1,16 @@
-const JSON_FILE = "https://drive.google.com/uc?export=download&id=1MSQd7q7X6T7Oe8eFOJ7AATKebk94mMk1";
+const JSON_FILE =
+  "https://drive.google.com/uc?export=download&id=1MSQd7q7X6T7Oe8eFOJ7AATKebk94mMk1";
+
 let items = [];
 let lastUpdateRaw = "";
 
 fetchData();
-setInterval(fetchData, 30000); // Auto-Refresh alle 30s
+setInterval(fetchData, 30000); // alle 30 Sekunden
 
 document.getElementById("filter").addEventListener("input", render);
 
 function fetchData() {
-  fetch(JSON_FILE + "?t=" + Date.now()) // Cache umgehen
+  fetch(JSON_FILE + "&t=" + Date.now()) // Cache umgehen
     .then(r => r.json())
     .then(j => {
       items = j.items || [];
@@ -16,7 +18,8 @@ function fetchData() {
       updateTimestamp();
       render();
     })
-    .catch(() => {
+    .catch(err => {
+      console.error(err);
       document.getElementById("update").innerText =
         "Fehler beim Laden der Daten";
     });
@@ -24,8 +27,10 @@ function fetchData() {
 
 function updateTimestamp() {
   if (!lastUpdateRaw) return;
+
   const d = new Date(lastUpdateRaw.replace(" ", "T"));
   const mins = Math.round((Date.now() - d.getTime()) / 60000);
+
   document.getElementById("update").innerText =
     mins <= 1
       ? "Gerade aktualisiert"
@@ -77,4 +82,3 @@ function toggle(idx) {
   const el = document.getElementById("d" + idx);
   el.style.display = el.style.display === "block" ? "none" : "block";
 }
-
