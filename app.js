@@ -4,15 +4,38 @@ const JSON_FILE =
 let items = [];
 let lastUpdateRaw = "";
 
-/* ===== Zahl sicher parsen (kein NaN, Komma erlaubt) ===== */
+/* ===== Zahl sicher parsen ===== */
 function num(v) {
   if (v === null || v === undefined || v === "") return 0;
   return Number(String(v).replace(",", ".")) || 0;
 }
 
-/* ===== Initial laden ===== */
+/* =====================================================
+   DARKMODE – Toggle + Speicherung
+   ===================================================== */
+const darkBtn = document.getElementById("darkToggle");
+const body = document.body;
+
+// beim Laden Zustand setzen
+if (localStorage.getItem("darkmode") === "on") {
+  body.classList.add("dark");
+  darkBtn.textContent = "☀️";
+}
+
+// Klick auf Button
+darkBtn.addEventListener("click", () => {
+  body.classList.toggle("dark");
+
+  const isDark = body.classList.contains("dark");
+  localStorage.setItem("darkmode", isDark ? "on" : "off");
+  darkBtn.textContent = isDark ? "☀️" : "🌙";
+});
+
+/* =====================================================
+   Initial laden
+   ===================================================== */
 fetchData();
-setInterval(fetchData, 30000); // alle 30 Sekunden
+setInterval(fetchData, 30000);
 
 document.getElementById("filter").addEventListener("input", render);
 
@@ -27,10 +50,9 @@ function fetchData() {
       items = j.items || [];
       lastUpdateRaw = j.lastUpdate || "";
       updateTimestamp();
-      updateCount(); 
+      updateCount();
       render();
     })
-
     .catch(err => {
       console.error(err);
       document.getElementById("update").innerText =
@@ -51,14 +73,13 @@ function updateTimestamp() {
       : "Aktualisiert vor " + mins + " Minuten";
 }
 
-/* ===== Artikelanzahl anzeigen ===== */
+/* ===== Artikelanzahl ===== */
 function updateCount() {
   const el = document.getElementById("count");
   if (!el) return;
 
-  const count = items.length;
-  el.innerText = count > 0
-    ? count + " Artikel gepflegt"
+  el.innerText = items.length > 0
+    ? items.length + " Artikel gepflegt"
     : "";
 }
 
@@ -81,12 +102,10 @@ function render() {
         <div class="item">
           <div><b>${i.name}</b> (${i.kategorie})</div>
 
-          <!-- IMMER errechneter Preis -->
           <div class="price">
             <b>Errechneter Preis: ${num(i.verkaufspreis).toFixed(2)} €</b>
           </div>
 
-          <!-- Status bleibt -->
           <div class="${abw ? "warn" : "ok"}">
             ${abw ? "⚠ Abweichung zum Vorschlag" : "✓ Preis entspricht Vorschlag"}
           </div>
@@ -106,7 +125,7 @@ function render() {
     });
 }
 
-/* ===== Details ein/aus ===== */
+/* ===== Details Toggle ===== */
 function toggle(idx) {
   const el = document.getElementById("d" + idx);
   el.style.display = el.style.display === "block" ? "none" : "block";
