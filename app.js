@@ -27,8 +27,10 @@ function fetchData() {
       items = j.items || [];
       lastUpdateRaw = j.lastUpdate || "";
       updateTimestamp();
+      updateCount(); 
       render();
     })
+
     .catch(err => {
       console.error(err);
       document.getElementById("update").innerText =
@@ -47,6 +49,17 @@ function updateTimestamp() {
     mins <= 1
       ? "Gerade aktualisiert"
       : "Aktualisiert vor " + mins + " Minuten";
+}
+
+/* ===== Artikelanzahl anzeigen ===== */
+function updateCount() {
+  const el = document.getElementById("count");
+  if (!el) return;
+
+  const count = items.length;
+  el.innerText = count > 0
+    ? count + " Artikel gepflegt"
+    : "";
 }
 
 /* ===== Rendern ===== */
@@ -98,4 +111,3 @@ function toggle(idx) {
   const el = document.getElementById("d" + idx);
   el.style.display = el.style.display === "block" ? "none" : "block";
 }
-
