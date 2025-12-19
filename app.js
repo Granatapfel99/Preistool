@@ -1,5 +1,5 @@
 const JSON_FILE =
-  "https://script.googleusercontent.com/macros/echo?user_content_key=AehSKLgHq3fKUyBN2Xlm9Dw4RuvRsRBIDy5ijxiSi4Owux_n87WY8adBaVrbYBDFXI8T2-yBubOc-n7G4Q72D3dS43l_VmtUNBuaJ2GSCofaiCsbRrXmvKPf4V6wsW6RUj1jVbRlDGOTHNQn8jslWsgzj0JKrUGCf-Wo8-GTRMfE6ZOf8Ebizl4D3G1zFisH67B3Z7aAJVG1yxE6-kPw3a2jV1KTZoPppCJ3DsbeZVeUHghe_TbdMwgSg_5Jhw-6gUBeFqnVSivAiWjxXaNKxgYqprV3HMJ-Aw&lib=MrmxPIqH4sSvTYrMaY0FRoptJDvP0MYyG";
+  "https://script.google.com/macros/s/AKfycbxv6YW4iFXqTrxIB5J-5BxWQ1E8Jt3I4Wa9R__i_eHdYh3suRvpT8EJWxRGFyoaFgfw/exec";
 
 let items = [];
 let lastUpdateRaw = "";
@@ -96,5 +96,6 @@ function toggle(idx) {
   const el = document.getElementById("d" + idx);
   el.style.display = el.style.display === "block" ? "none" : "block";
 }
+
 
 
