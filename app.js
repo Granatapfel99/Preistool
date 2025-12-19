@@ -68,11 +68,12 @@ function render() {
         <div class="item">
           <div><b>${i.name}</b> (${i.kategorie})</div>
 
+          <!-- IMMER errechneter Preis -->
           <div class="price">
-            <span>Errechneter Preis:</span>
-            <b> ${num(i.verkaufspreis).toFixed(2)} €</b>
+            <b>Errechneter Preis: ${num(i.verkaufspreis).toFixed(2)} €</b>
           </div>
 
+          <!-- Status bleibt -->
           <div class="${abw ? "warn" : "ok"}">
             ${abw ? "⚠ Abweichung zum Vorschlag" : "✓ Preis entspricht Vorschlag"}
           </div>
@@ -83,7 +84,7 @@ function render() {
             Rohpreis: ${num(i.rohpreis).toFixed(2)} €<br>
             EK netto: ${num(i.ek_netto).toFixed(2)} €<br>
             EK brutto: ${num(i.ek_brutto).toFixed(2)} €<br>
-            Preisschild: ${num(i.preisschild).toFixed(2)} €<br>
+            Vorschlagspreis: ${num(i.preisschild).toFixed(2)} €<br>
             Im Automat: ${i.im_automat}<br>
             Bestand: ${i.bestand} Stk
           </div>
@@ -97,3 +98,4 @@ function toggle(idx) {
   const el = document.getElementById("d" + idx);
   el.style.display = el.style.display === "block" ? "none" : "block";
 }
+
