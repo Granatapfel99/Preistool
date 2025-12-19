@@ -1,5 +1,5 @@
 const JSON_FILE =
-  "https://script.google.com/macros/s/AKfycbyAwBU4Enk8bhY53wfv9Qh080N4ciwA4bC0Km-IdHaf7foQAOdAC8Bvc8ef3_O8CQw5/exec";
+  "https://script.google.com/macros/s/AKfycbwCJbO-Xqnei4smcldj0icTpqNCZC11-L1ybhIOc6B6QNKANn9a9rXG30YTpEms1w4e/exec";
 
 let items = [];
 let lastUpdateRaw = "";
@@ -82,4 +82,5 @@ function toggle(idx) {
   const el = document.getElementById("d" + idx);
   el.style.display = el.style.display === "block" ? "none" : "block";
 }
+
 
