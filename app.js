@@ -10,7 +10,7 @@ setInterval(fetchData, 30000); // alle 30 Sekunden
 document.getElementById("filter").addEventListener("input", render);
 
 function fetchData() {
-  fetch(JSON_FILE + "&t=" + Date.now()) // Cache umgehen
+  fetch(JSON_FILE + "&t=" + Date.now())
     .then(r => r.json())
     .then(j => {
       items = j.items || [];
