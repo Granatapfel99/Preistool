@@ -4,14 +4,25 @@ const JSON_FILE =
 let items = [];
 let lastUpdateRaw = "";
 
+/* ===== Zahl sicher parsen (kein NaN, Komma erlaubt) ===== */
+function num(v) {
+  if (v === null || v === undefined || v === "") return 0;
+  return Number(String(v).replace(",", ".")) || 0;
+}
+
+/* ===== Initial laden ===== */
 fetchData();
 setInterval(fetchData, 30000); // alle 30 Sekunden
 
 document.getElementById("filter").addEventListener("input", render);
 
+/* ===== Daten laden ===== */
 function fetchData() {
   fetch(JSON_FILE + "&t=" + Date.now())
-    .then(r => r.json())
+    .then(r => {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    })
     .then(j => {
       items = j.items || [];
       lastUpdateRaw = j.lastUpdate || "";
@@ -25,6 +36,7 @@ function fetchData() {
     });
 }
 
+/* ===== Zeitstempel ===== */
 function updateTimestamp() {
   if (!lastUpdateRaw) return;
 
@@ -37,6 +49,7 @@ function updateTimestamp() {
       : "Aktualisiert vor " + mins + " Minuten";
 }
 
+/* ===== Rendern ===== */
 function render() {
   const f = document.getElementById("filter").value.toLowerCase();
   const list = document.getElementById("list");
@@ -44,8 +57,8 @@ function render() {
 
   items
     .filter(i =>
-      i.name.toLowerCase().includes(f) ||
-      i.kategorie.toLowerCase().includes(f)
+      (i.name || "").toLowerCase().includes(f) ||
+      (i.kategorie || "").toLowerCase().includes(f)
     )
     .forEach((i, idx) => {
 
@@ -56,7 +69,7 @@ function render() {
           <div><b>${i.name}</b> (${i.kategorie})</div>
 
           <div class="price">
-            ${Number(i.verkaufspreis).toFixed(2)} €
+            ${num(i.verkaufspreis).toFixed(2)} €
           </div>
 
           <div class="${abw ? "warn" : "ok"}">
@@ -66,10 +79,10 @@ function render() {
           <button onclick="toggle(${idx})">Details</button>
 
           <div class="details" id="d${idx}">
-            Rohpreis: ${Number(i.rohpreis).toFixed(2)} €<br>
-            EK netto: ${Number(i.ek_netto).toFixed(2)} €<br>
-            EK brutto: ${Number(i.ek_brutto).toFixed(2)} €<br>
-            Preisschild: ${Number(i.preisschild).toFixed(2)} €<br>
+            Rohpreis: ${num(i.rohpreis).toFixed(2)} €<br>
+            EK netto: ${num(i.ek_netto).toFixed(2)} €<br>
+            EK brutto: ${num(i.ek_brutto).toFixed(2)} €<br>
+            Preisschild: ${num(i.preisschild).toFixed(2)} €<br>
             Im Automat: ${i.im_automat}<br>
             Bestand: ${i.bestand} Stk
           </div>
@@ -78,11 +91,8 @@ function render() {
     });
 }
 
+/* ===== Details ein/aus ===== */
 function toggle(idx) {
   const el = document.getElementById("d" + idx);
   el.style.display = el.style.display === "block" ? "none" : "block";
 }
-
-
-
-
