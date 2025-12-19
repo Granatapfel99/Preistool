@@ -63,13 +63,15 @@ function render() {
     .forEach((i, idx) => {
 
       const abw = i.abweichung_zum_vorschlag === "ja";
+      const preisTyp = abw ? "Errechneter Preis" : "Vorschlagspreis";
 
       list.innerHTML += `
         <div class="item">
           <div><b>${i.name}</b> (${i.kategorie})</div>
 
           <div class="price">
-            ${num(i.verkaufspreis).toFixed(2)} €
+            <span>${preisTyp}:</span>
+            <b> ${num(i.verkaufspreis).toFixed(2)} €</b>
           </div>
 
           <div class="${abw ? "warn" : "ok"}">
@@ -96,6 +98,7 @@ function toggle(idx) {
   const el = document.getElementById("d" + idx);
   el.style.display = el.style.display === "block" ? "none" : "block";
 }
+
 
 
 
