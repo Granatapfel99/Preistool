@@ -10,19 +10,24 @@
       font-family: system-ui, Arial, sans-serif;
       margin: 12px;
       background: #fafafa;
+      color: #000;
     }
+
     h2 { margin-bottom: 4px; }
-    #update {
+
+    #update, #count {
       font-size: 0.9em;
       color: #555;
-      margin-bottom: 10px;
+      margin-bottom: 6px;
     }
+
     input {
       width: 100%;
       padding: 8px;
       margin-bottom: 12px;
       font-size: 1em;
     }
+
     .item {
       background: #fff;
       border-radius: 6px;
@@ -30,74 +35,82 @@
       margin-bottom: 10px;
       box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
+
     .price {
       font-size: 1.3em;
       font-weight: bold;
     }
+
     .ok { color: #0a7a0a; }
     .warn { color: #c00; }
+
     .details {
       display: none;
       font-size: 0.9em;
       margin-top: 6px;
       color: #444;
     }
+
     button {
       margin-top: 6px;
       padding: 6px 10px;
       font-size: 0.9em;
+      cursor: pointer;
     }
-      /* ===== Darkmode ===== */
-  body.dark {
-    background: #121212;
-    color: #e0e0e0;
-  }
 
-  body.dark .item {
-    background: #1e1e1e;
-    box-shadow: none;
-  }
+    /* ===== Darkmode ===== */
+    body.dark {
+      background: #121212;
+      color: #e0e0e0;
+    }
 
-  body.dark .price {
-    color: #ffffff;
-  }
+    body.dark #update,
+    body.dark #count {
+      color: #aaa;
+    }
 
-  body.dark .ok {
-    color: #6fdc6f;
-  }
+    body.dark .item {
+      background: #1e1e1e;
+      box-shadow: none;
+    }
 
-  body.dark .warn {
-    color: #ff6b6b;
-  }
+    body.dark .price {
+      color: #ffffff;
+    }
 
-  body.dark input {
-    background: #1e1e1e;
-    color: #e0e0e0;
-    border: 1px solid #333;
-  }
+    body.dark .ok {
+      color: #6fdc6f;
+    }
 
-  body.dark button {
-    background: #2a2a2a;
-    color: #e0e0e0;
-    border: 1px solid #444;
-  }
+    body.dark .warn {
+      color: #ff6b6b;
+    }
+
+    body.dark input {
+      background: #1e1e1e;
+      color: #e0e0e0;
+      border: 1px solid #333;
+    }
+
+    body.dark button {
+      background: #2a2a2a;
+      color: #e0e0e0;
+      border: 1px solid #444;
+    }
   </style>
 </head>
 
 <body>
 
+<!-- Header + Darkmode Button -->
 <div style="display:flex;justify-content:space-between;align-items:center;">
   <h2>Preise</h2>
-  <button id="darkToggle" title="Darkmode"
-    style="font-size:1.1em;padding:4px 8px;cursor:pointer;">
-    🌙
-  </button>
+  <button id="darkToggle" title="Darkmode">🌙</button>
 </div>
 
 <div id="update">Lade Daten…</div>
-<div id="count" style="font-size:0.9em;color:#555;margin-bottom:10px;"></div>
+<div id="count"></div>
 
-  
 <input id="filter" type="text" placeholder="Produkt oder Kategorie suchen">
 
 <div id="list"></div>
@@ -105,6 +118,3 @@
 <script src="app.js"></script>
 </body>
 </html>
-
-
-
