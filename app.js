@@ -116,7 +116,7 @@ function render() {
             Rohpreis: ${num(i.rohpreis).toFixed(2)} €<br>
             EK netto: ${num(i.ek_netto).toFixed(2)} €<br>
             EK brutto: ${num(i.ek_brutto).toFixed(2)} €<br>
-            Vorschlagspreis: ${num(i.preisschild).toFixed(2)} €<br>
+            Preisschild: ${num(i.preisschild).toFixed(2)} €<br>
             Im Automat: ${i.im_automat}<br>
             Bestand: ${i.bestand} Stk
           </div>
@@ -130,3 +130,4 @@ function toggle(idx) {
   const el = document.getElementById("d" + idx);
   el.style.display = el.style.display === "block" ? "none" : "block";
 }
+
