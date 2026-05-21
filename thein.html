@@ -182,31 +182,7 @@ tbody tr:hover{background:var(--panel2)}
 
 /* ---------- Scanner ---------- */
 #reader{width:100%;border-radius:var(--radius);overflow:hidden;margin-bottom:14px;min-height:60px}
-#reader{
-  position:relative;
-  overflow:hidden;
-  background:#000;
-}
-
-#reader video{
-  width:100%;
-  border-radius:var(--radius);
-  object-fit:cover;
-}
-
-#reader::after{
-  content:"";
-  position:absolute;
-  left:50%;
-  top:50%;
-  width:78%;
-  height:2px;
-  background:var(--acc);
-  transform:translate(-50%,-50%);
-  box-shadow:0 0 14px var(--acc);
-  border-radius:999px;
-  pointer-events:none;
-}
+#reader video{border-radius:var(--radius)}
 .scan-status{font-size:13px;color:var(--txt2);text-align:center;margin-bottom:12px;font-family:var(--mono)}
 
 /* ---------- Settings ---------- */
@@ -293,7 +269,7 @@ tbody tr:hover{background:var(--panel2)}
 <div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
 <div class="toast" id="toast"></div>
 
-<script src="https://unpkg.com/@zxing/browser@0.1.5/umd/index.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 "use strict";
 /* =====================================================================
@@ -590,111 +566,18 @@ function openScanner(){
   showModal();
   startCam();
 }
-let scannerControls = null;
-let scannerLocked = false;
-
-async function startCam(){
-
-  if(typeof ZXingBrowser === 'undefined'){
-    $('scanStatus').textContent =
-      'Scanner-Bibliothek nicht geladen.';
-    return;
-  }
-
+function startCam(){
+  if(typeof Html5Qrcode === 'undefined'){ $('scanStatus').textContent='Scanner-Bibliothek nicht geladen — nutze die manuelle Eingabe.'; return; }
   try{
-
-    const videoEl = document.createElement('video');
-
-    videoEl.style.width = '100%';
-    videoEl.style.borderRadius = '14px';
-    videoEl.setAttribute('playsinline', true);
-    videoEl.setAttribute('autoplay', true);
-    videoEl.setAttribute('muted', true);
-
-    $('reader').innerHTML = '';
-    $('reader').appendChild(videoEl);
-
-    $('scanStatus').textContent =
-      'Kamera wird gestartet…';
-
-    const codeReader =
-      new ZXingBrowser.BrowserMultiFormatReader();
-
-    scannerControls =
-      await codeReader.decodeFromConstraints(
-
-        {
-          video: {
-            facingMode: {
-              ideal: 'environment'
-            },
-
-            width: {
-              ideal: 1920
-            },
-
-            height: {
-              ideal: 1080
-            },
-
-            focusMode: 'continuous'
-          }
-        },
-
-        videoEl,
-
-        (result, err) => {
-
-          if(scannerLocked) return;
-
-          if(result){
-
-            scannerLocked = true;
-
-            const code = result.getText();
-
-            navigator.vibrate?.(80);
-
-            $('scanStatus').textContent =
-              'Gescannt: ' + code;
-
-            stopCam();
-
-            lookupEan(code);
-
-            return;
-          }
-        }
-      );
-
-    $('scanStatus').textContent =
-      'Barcode vor Kamera halten…';
-
-  }catch(e){
-
-    console.error(e);
-
-    $('scanStatus').textContent =
-      'Kamera nicht verfügbar.';
-  }
+    html5qr = new Html5Qrcode("reader");
+    html5qr.start({facingMode:"environment"}, {fps:10, qrbox:{width:250,height:140}},
+      code=>{ stopCam(); $('scanStatus').textContent='Gescannt: '+code; lookupEan(code); },
+      ()=>{} )
+    .then(()=>$('scanStatus').textContent='Halte einen Barcode vor die Kamera…')
+    .catch(e=>$('scanStatus').textContent='Kamera nicht verfügbar ('+e+') — nutze die manuelle Eingabe.');
+  }catch(e){ $('scanStatus').textContent='Kamera-Fehler — nutze die manuelle Eingabe.'; }
 }
-function stopCam(){
-
-  scannerLocked = false;
-
-  try{
-
-    if(scannerControls){
-      scannerControls.stop();
-      scannerControls = null;
-    }
-
-  }catch(e){
-    console.error(e);
-  }
-
-  $('reader').innerHTML = '';
-}
+function stopCam(){ if(html5qr){ try{ html5qr.stop().then(()=>html5qr.clear()).catch(()=>{}); }catch(e){} html5qr=null; } }
 function closeScanner(){ stopCam(); closeModal(); }
 async function lookupEan(ean){
   ean=String(ean||'').trim(); if(!ean){ toast('Bitte EAN eingeben'); return; }
