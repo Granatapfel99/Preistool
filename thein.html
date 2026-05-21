@@ -679,8 +679,14 @@ function exportVerderbCsv(){
 function renderDaten(){
   $('content').innerHTML = `
     <div class="page-head"><div><h1>Import / Export</h1><div class="sub">Daten ein- und ausgeben · kompatibel zu deiner bestehenden Seite</div></div></div>
+    <div class="setcard" style="margin-bottom:16px;border-color:var(--acc-dim)">
+      <h3>★ Aktuelle Liste von deiner Seite laden <span style="font-size:12px;color:var(--acc)">empfohlen</span></h3>
+      <p class="d">Holt die JSON direkt von deinem GitHub — kein Datei-Speichern, kein Strg+S. Trag die aktuelle Datei-URL ein (das Datum im Namen ändert sich, wenn dein Kumpel neu exportiert) und klick laden.</p>
+      <div class="field full" style="margin-bottom:12px"><input id="urlInput" value="https://granatapfel99.github.io/export/2025-12-18/preise_2025-12-18_22-41-03.json"></div>
+      <button class="btn btn-acc" id="urlBtn" onclick="importFromUrl()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Aktuelle Liste laden</button>
+    </div>
     <div class="setcard" style="margin-bottom:16px">
-      <h3>Bestehende JSON importieren</h3>
+      <h3>Datei importieren</h3>
       <p class="d">Liest deine aktuelle <code>preise_*.json</code> ein (Format deiner jetzigen app.js). MwSt &amp; netto/brutto werden aus EK-netto/brutto erkannt. Vorschläge werden frisch gerechnet — Margen kannst du danach pro Produkt feinjustieren.</p>
       <input type="file" id="impFile" accept=".json,application/json" style="display:none" onchange="importJson(this)">
       <div style="display:flex;gap:9px;flex-wrap:wrap">
@@ -699,33 +705,54 @@ function renderDaten(){
       </div>
     </div>`;
 }
+/* Repariert kaputte Umlaute (UTF-8 als Latin-1 gelesen: Ã¤->ä). Nicht-rettbare � bleiben. */
+function fixMojibake(s){
+  if(!s || !/[ÃÂ]/.test(s)) return s;
+  try{ const bytes=Uint8Array.from([...s].map(c=>c.charCodeAt(0)&0xff)); return new TextDecoder('utf-8').decode(bytes); }
+  catch(e){ return s; }
+}
+function mapImportItem(it){
+  const ekn=num(it.ek_netto), ekb=num(it.ek_brutto), roh=num(it.rohpreis);
+  const mwst = ekn>0 ? Math.round((ekb/ekn-1)*100) : settings.default_mwst;
+  const nb = Math.abs(roh-ekb) <= Math.abs(roh-ekn) ? 'brutto':'netto';
+  return {
+    name: fixMojibake(it.name||''), kategorie: fixMojibake(it.kategorie||''), ean: it.ean||'',
+    rohpreis: roh||ekb||ekn, netto_brutto: nb, mwst_ek: (mwst===7||mwst===19)?mwst:settings.default_mwst,
+    marge_soll: settings.default_marge,
+    preisschild: it.preisschild!=null?num(it.preisschild):'',
+    aktionspreis:'', pfand_betrag:0, pfand_mwst:19,
+    bestand: it.bestand!=null?num(it.bestand):999999,
+    mhd:'', beliebtheit:'keine Angabe',
+    im_automat: String(it.im_automat).toLowerCase()==='ja' || it.im_automat===true
+  };
+}
+function doImport(items){
+  if(!items || !items.length){ alert('Keine Produkte in den Daten gefunden.'); return; }
+  if(products.length>0 && !confirm('Es sind bereits '+products.length+' Produkte da.\n\nMit den '+items.length+' importierten ERSETZEN?\n(OK = ersetzen, Abbrechen = nichts ändern)')) return;
+  products=[];
+  items.forEach(it=> products.push({id:nextId(products), ...mapImportItem(it)}));
+  DB.saveProducts(products); go('produkte'); toast(items.length+' Produkte importiert');
+}
 function importJson(input){
   const file=input.files[0]; if(!file)return;
   const fr=new FileReader();
-  fr.onload=()=>{ try{
-    const j=JSON.parse(fr.result);
-    const items=Array.isArray(j)?j:(j.items||[]);
-    let added=0;
-    items.forEach(it=>{
-      const ekn=num(it.ek_netto), ekb=num(it.ek_brutto), roh=num(it.rohpreis);
-      const mwst = ekn>0 ? Math.round((ekb/ekn-1)*100) : settings.default_mwst;
-      const nb = Math.abs(roh-ekb) <= Math.abs(roh-ekn) ? 'brutto':'netto';
-      products.push({
-        id: nextId(products),
-        name: it.name||'', kategorie: it.kategorie||'', ean: it.ean||'',
-        rohpreis: roh||ekb||ekn, netto_brutto: nb, mwst_ek: (mwst===7||mwst===19)?mwst:settings.default_mwst,
-        marge_soll: settings.default_marge,
-        preisschild: it.preisschild!=null?num(it.preisschild):'',
-        aktionspreis:'', pfand_betrag:0, pfand_mwst:19,
-        bestand: it.bestand!=null?num(it.bestand):999999,
-        mhd:'', beliebtheit:'keine Angabe',
-        im_automat: String(it.im_automat).toLowerCase()==='ja' || it.im_automat===true
-      });
-      added++;
-    });
-    DB.saveProducts(products); render(); toast(added+' Produkte importiert');
-  }catch(e){ alert('Fehler beim Lesen: '+e); } };
+  fr.onload=()=>{ try{ const j=JSON.parse(fr.result); doImport(Array.isArray(j)?j:(j.items||[])); }
+    catch(e){ alert('Fehler beim Lesen: '+e); } };
   fr.readAsText(file);
+}
+async function importFromUrl(){
+  const url=($('urlInput').value||'').trim();
+  if(!url){ toast('Bitte URL eintragen'); return; }
+  const btn=$('urlBtn'); const old=btn.innerHTML; btn.innerHTML='Lädt…'; btn.disabled=true;
+  try{
+    const res=await fetch(url,{cache:'no-store'});
+    if(!res.ok) throw new Error('HTTP '+res.status+(res.status===404?' (Datei/Datum stimmt nicht)':''));
+    const j=await res.json();
+    doImport(Array.isArray(j)?j:(j.items||[]));
+  }catch(e){
+    alert('Konnte nicht laden:\n'+e+'\n\nTipp: Öffne die URL einmal im Browser. Erscheint dort Text/JSON, stimmt sie. Bei „404" ist das Datum im Dateinamen anders.');
+  }
+  btn.innerHTML=old; btn.disabled=false;
 }
 function exportWebJson(){
   const out={ lastUpdate: new Date().toISOString().slice(0,19).replace('T',' '),
