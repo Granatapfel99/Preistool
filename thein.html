@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>The IN — Snackautomat-Verwaltung</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0d0f0d;
+  --bg2:#141714;
+  --panel:#1a1e1a;
+  --panel2:#212621;
+  --line:#2c322c;
+  --line2:#3a423a;
+  --txt:#e8ece8;
+  --txt2:#9aa49a;
+  --txt3:#6c766c;
+  --acc:#4ade5e;        /* vending green */
+  --acc-dim:#2f8f3e;
+  --warn:#ff7a5c;
+  --warn-bg:#2a1a16;
+  --ok:#4ade5e;
+  --blue:#5b9dff;
+  --radius:14px;
+  --radius-sm:9px;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --sans:'IBM Plex Sans',system-ui,sans-serif;
+  --disp:'Sora',system-ui,sans-serif;
+}
+[data-theme="light"]{
+  --bg:#f4f6f4;--bg2:#eceeec;--panel:#ffffff;--panel2:#f6f8f6;
+  --line:#e2e6e2;--line2:#d2d8d2;--txt:#13160f;--txt2:#5a635a;--txt3:#8b948b;
+  --acc:#1f9d3a;--acc-dim:#1f9d3a;--warn:#d8401c;--warn-bg:#fbe9e4;--ok:#1f9d3a;--blue:#2f6fe0;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  font-family:var(--sans);background:var(--bg);color:var(--txt);
+  font-size:15px;line-height:1.45;min-height:100vh;
+  background-image:radial-gradient(circle at 18% -10%,rgba(74,222,94,.07),transparent 45%),radial-gradient(circle at 100% 0%,rgba(91,157,255,.05),transparent 40%);
+  background-attachment:fixed;
+}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,select,textarea{font-family:inherit;font-size:15px}
+.mono{font-family:var(--mono)}
+.app{display:flex;min-height:100vh}
+
+/* ---------- Sidebar (desktop) ---------- */
+.sidebar{
+  width:236px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--line);
+  display:flex;flex-direction:column;position:sticky;top:0;height:100vh;
+}
+.brand{display:flex;align-items:center;gap:11px;padding:20px 18px 18px}
+.brand-logo{width:38px;height:38px;flex-shrink:0}
+.brand-txt b{font-family:var(--disp);font-weight:800;font-size:18px;letter-spacing:-.5px;display:block;line-height:1}
+.brand-txt span{font-size:11px;color:var(--txt2);letter-spacing:1.5px;text-transform:uppercase}
+.nav{padding:6px 12px;display:flex;flex-direction:column;gap:3px;flex:1}
+.nav button{display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:var(--radius-sm);color:var(--txt2);font-weight:500;font-size:14.5px;text-align:left;transition:.13s}
+.nav button:hover{background:var(--panel);color:var(--txt)}
+.nav button.active{background:var(--panel);color:var(--txt);box-shadow:inset 3px 0 0 var(--acc)}
+.nav button svg{width:19px;height:19px;flex-shrink:0;opacity:.85}
+.nav button.active svg{color:var(--acc);opacity:1}
+.sidebar-foot{padding:14px 18px;border-top:1px solid var(--line);font-size:11.5px;color:var(--txt3);font-family:var(--mono)}
+
+/* ---------- Main ---------- */
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.topbar{display:none}
+.content{padding:26px 30px 60px;max-width:1180px;width:100%;margin:0 auto;flex:1}
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+.page-head h1{font-family:var(--disp);font-weight:700;font-size:27px;letter-spacing:-.7px;margin:0}
+.page-head .sub{color:var(--txt2);font-size:13.5px;margin-top:3px;font-family:var(--mono)}
+
+/* ---------- Buttons ---------- */
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:var(--radius-sm);font-weight:600;font-size:14px;transition:.13s;border:1px solid transparent;white-space:nowrap}
+.btn svg{width:17px;height:17px}
+.btn-acc{background:var(--acc);color:#06120a}
+.btn-acc:hover{filter:brightness(1.08)}
+.btn-ghost{background:var(--panel);color:var(--txt);border-color:var(--line2)}
+.btn-ghost:hover{background:var(--panel2);border-color:var(--acc-dim)}
+.btn-danger{background:var(--warn-bg);color:var(--warn);border-color:transparent}
+.btn-danger:hover{filter:brightness(1.1)}
+.btn-sm{padding:7px 12px;font-size:13px}
+
+/* ---------- Toolbar ---------- */
+.toolbar{display:flex;gap:10px;align-items:center;margin-bottom:18px;flex-wrap:wrap}
+.search{flex:1;min-width:200px;position:relative}
+.search svg{position:absolute;left:13px;top:50%;transform:translateY(-50%);width:17px;height:17px;color:var(--txt3)}
+.search input{width:100%;padding:11px 14px 11px 40px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-sm);color:var(--txt);outline:none;transition:.13s}
+.search input:focus{border-color:var(--acc-dim);box-shadow:0 0 0 3px rgba(74,222,94,.1)}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{padding:8px 13px;background:var(--panel);border:1px solid var(--line);border-radius:99px;font-size:13px;color:var(--txt2);font-weight:500;transition:.13s}
+.chip:hover{border-color:var(--line2)}
+.chip.on{background:rgba(74,222,94,.13);border-color:var(--acc-dim);color:var(--acc)}
+.selstyle{padding:9px 12px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-sm);color:var(--txt);outline:none}
+
+/* ---------- Product grid ---------- */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:13px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:15px 16px;transition:.14s;cursor:pointer;position:relative;overflow:hidden}
+.card:hover{border-color:var(--line2);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.card-name{font-weight:600;font-size:15px;line-height:1.25;margin:0}
+.card-kat{font-size:12px;color:var(--txt3);margin-top:2px}
+.card-price{font-family:var(--mono);font-weight:600;font-size:25px;letter-spacing:-1px;margin:13px 0 4px;display:flex;align-items:baseline;gap:6px}
+.card-price .eur{font-size:15px;color:var(--txt2);font-weight:400}
+.card-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}
+.tag{font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:99px;display:inline-flex;align-items:center;gap:5px}
+.tag-ok{background:rgba(74,222,94,.12);color:var(--ok)}
+.tag-warn{background:var(--warn-bg);color:var(--warn)}
+.tag-mut{background:var(--panel2);color:var(--txt3)}
+.tag-action{background:rgba(91,157,255,.13);color:var(--blue)}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.dot-on{background:var(--acc);box-shadow:0 0 7px var(--acc)}
+.dot-off{background:var(--txt3)}
+.card-meta{font-size:12px;color:var(--txt3);font-family:var(--mono);margin-top:7px;display:flex;gap:14px}
+.mhd-soon{color:var(--warn)!important}
+
+/* ---------- Empty ---------- */
+.empty{text-align:center;padding:70px 20px;color:var(--txt3)}
+.empty svg{width:48px;height:48px;opacity:.4;margin-bottom:14px}
+
+/* ---------- FAB ---------- */
+.fab-wrap{position:fixed;right:22px;bottom:22px;display:flex;flex-direction:column;gap:11px;z-index:40}
+.fab{width:54px;height:54px;border-radius:50%;background:var(--acc);color:#06120a;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 22px rgba(74,222,94,.35);transition:.14s}
+.fab:hover{transform:scale(1.06)}
+.fab svg{width:25px;height:25px}
+.fab.scan{background:var(--panel);color:var(--txt);border:1px solid var(--line2);box-shadow:0 6px 18px rgba(0,0,0,.3)}
+
+/* ---------- Modal ---------- */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.62);backdrop-filter:blur(4px);z-index:100;display:none;align-items:flex-start;justify-content:center;padding:24px;overflow-y:auto}
+.overlay.show{display:flex}
+.modal{background:var(--panel);border:1px solid var(--line2);border-radius:18px;width:100%;max-width:560px;margin:auto;box-shadow:0 24px 70px rgba(0,0,0,.5);animation:pop .18s ease}
+@keyframes pop{from{transform:translateY(14px) scale(.98);opacity:0}to{transform:none;opacity:1}}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);border-radius:18px 18px 0 0;z-index:2}
+.modal-head h2{font-family:var(--disp);font-size:19px;font-weight:700;margin:0}
+.x{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:var(--txt2);background:var(--panel2)}
+.x:hover{color:var(--txt);background:var(--line)}
+.x svg{width:18px;height:18px}
+.modal-body{padding:20px 22px}
+
+/* ---------- Form ---------- */
+.fieldset{margin-bottom:20px}
+.fieldset>legend{font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--acc);font-weight:700;margin-bottom:11px;font-family:var(--mono);padding:0}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.field{display:flex;flex-direction:column;gap:5px}
+.field.full{grid-column:1/-1}
+.field label{font-size:12.5px;color:var(--txt2);font-weight:500}
+.field input,.field select,.field textarea{padding:10px 12px;background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius-sm);color:var(--txt);outline:none;transition:.12s;width:100%}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--acc-dim);box-shadow:0 0 0 3px rgba(74,222,94,.1)}
+.field .hint{font-size:11px;color:var(--txt3)}
+.inline-toggle{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius-sm)}
+.switch{position:relative;width:42px;height:24px;flex-shrink:0}
+.switch input{display:none}
+.slider{position:absolute;inset:0;background:var(--line2);border-radius:99px;transition:.18s}
+.slider:before{content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.18s}
+.switch input:checked+.slider{background:var(--acc)}
+.switch input:checked+.slider:before{transform:translateX(18px)}
+
+/* ---------- Calc panel ---------- */
+.calc{background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius);padding:15px 16px;margin-bottom:20px}
+.calc-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px 18px}
+.calc-row{display:flex;justify-content:space-between;align-items:baseline;font-size:13px}
+.calc-row span{color:var(--txt2)}
+.calc-row b{font-family:var(--mono);font-weight:600;font-size:14px}
+.calc-hero{grid-column:1/-1;border-top:1px solid var(--line);margin-top:5px;padding-top:11px;display:flex;justify-content:space-between;align-items:center}
+.calc-hero .lbl{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--txt2);font-family:var(--mono)}
+.calc-hero .val{font-family:var(--mono);font-weight:600;font-size:30px;letter-spacing:-1px;color:var(--acc)}
+.pos{color:var(--ok)}.neg{color:var(--warn)}
+
+/* ---------- Table (Warenverderb) ---------- */
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:760px}
+th{text-align:left;padding:11px 13px;background:var(--bg2);color:var(--txt2);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:11px 13px;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--panel2)}
+.num{font-family:var(--mono);text-align:right;white-space:nowrap}
+.tdel{color:var(--txt3)}
+.tdel:hover{color:var(--warn)}
+
+/* ---------- Scanner ---------- */
+#reader{width:100%;border-radius:var(--radius);overflow:hidden;margin-bottom:14px;min-height:60px}
+#reader video{border-radius:var(--radius)}
+.scan-status{font-size:13px;color:var(--txt2);text-align:center;margin-bottom:12px;font-family:var(--mono)}
+
+/* ---------- Settings ---------- */
+.setcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:20px 22px;max-width:560px}
+.setcard h3{font-family:var(--disp);font-size:16px;margin:0 0 4px}
+.setcard p.d{color:var(--txt2);font-size:13px;margin:0 0 16px}
+
+/* ---------- Toast ---------- */
+.toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--panel2);border:1px solid var(--line2);color:var(--txt);padding:12px 20px;border-radius:99px;font-size:14px;font-weight:500;box-shadow:0 10px 30px rgba(0,0,0,.4);opacity:0;transition:.22s;z-index:200;display:flex;align-items:center;gap:9px;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast svg{width:17px;height:17px;color:var(--acc)}
+
+/* ---------- Mobile ---------- */
+.botnav{display:none}
+@media(max-width:860px){
+  .sidebar{display:none}
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;background:var(--bg2);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:30}
+  .topbar .brand{padding:0}
+  .topbar .brand-logo{width:32px;height:32px}
+  .topbar .brand-txt b{font-size:16px}
+  .content{padding:18px 15px 100px}
+  .page-head h1{font-size:23px}
+  .grid{grid-template-columns:1fr}
+  .fgrid{grid-template-columns:1fr}
+  .calc-grid{grid-template-columns:1fr}
+  .fab-wrap{bottom:80px}
+  .botnav{display:flex;position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:1px solid var(--line);z-index:35;padding:6px 4px 8px}
+  .botnav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px;color:var(--txt3);font-size:10.5px;font-weight:600}
+  .botnav button svg{width:21px;height:21px}
+  .botnav button.active{color:var(--acc)}
+  .overlay{padding:0;align-items:flex-end}
+  .modal{max-width:none;border-radius:18px 18px 0 0;max-height:94vh;overflow-y:auto;margin:0}
+  .modal-head{border-radius:18px 18px 0 0}
+}
+</style>
+</head>
+<body data-theme="dark">
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="brand">
+      <svg class="brand-logo" viewBox="0 0 40 40" fill="none">
+        <rect x="3" y="2" width="34" height="36" rx="4" fill="#1a1e1a" stroke="#4ade5e" stroke-width="2"/>
+        <rect x="8" y="7" width="14" height="20" rx="1.5" fill="#0d0f0d" stroke="#3a423a"/>
+        <rect x="10" y="9" width="3.5" height="3.5" fill="#4ade5e"/>
+        <rect x="16" y="9" width="3.5" height="3.5" fill="#5b9dff"/>
+        <rect x="10" y="14" width="3.5" height="3.5" fill="#ff7a5c"/>
+        <rect x="16" y="14" width="3.5" height="3.5" fill="#4ade5e"/>
+        <rect x="10" y="19" width="3.5" height="3.5" fill="#5b9dff"/>
+        <rect x="16" y="19" width="3.5" height="3.5" fill="#4ade5e"/>
+        <rect x="26" y="7" width="6" height="13" rx="1" fill="#0d0f0d" stroke="#3a423a"/>
+        <rect x="26" y="24" width="6" height="8" rx="1" fill="#212621" stroke="#3a423a"/>
+        <rect x="8" y="30" width="14" height="3" rx="1" fill="#212621"/>
+      </svg>
+      <div class="brand-txt"><b>The IN</b><span>Snackautomat</span></div>
+    </div>
+    <nav class="nav" id="nav"></nav>
+    <div class="sidebar-foot" id="foot">— Produkte</div>
+  </aside>
+
+  <div class="main">
+    <!-- Mobile top -->
+    <div class="topbar">
+      <div class="brand">
+        <svg class="brand-logo" viewBox="0 0 40 40" fill="none"><rect x="3" y="2" width="34" height="36" rx="4" fill="#1a1e1a" stroke="#4ade5e" stroke-width="2"/><rect x="8" y="7" width="14" height="20" rx="1.5" fill="#0d0f0d" stroke="#3a423a"/><rect x="10" y="9" width="3.5" height="3.5" fill="#4ade5e"/><rect x="16" y="9" width="3.5" height="3.5" fill="#5b9dff"/><rect x="10" y="14" width="3.5" height="3.5" fill="#ff7a5c"/><rect x="16" y="14" width="3.5" height="3.5" fill="#4ade5e"/><rect x="26" y="7" width="6" height="13" rx="1" fill="#0d0f0d" stroke="#3a423a"/></svg>
+        <div class="brand-txt"><b>The IN</b></div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="toggleTheme()" id="themeBtnM">🌙</button>
+    </div>
+    <main class="content" id="content"></main>
+  </div>
+</div>
+
+<!-- Bottom nav (mobile) -->
+<nav class="botnav" id="botnav"></nav>
+
+<!-- FAB -->
+<div class="fab-wrap" id="fabwrap">
+  <button class="fab scan" title="Barcode scannen" onclick="openScanner()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M4 12h16"/></svg></button>
+  <button class="fab" title="Produkt anlegen" onclick="openProduct(null)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg></button>
+</div>
+
+<!-- Modal root -->
+<div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+"use strict";
+/* =====================================================================
+   THE IN — Snackautomat-Verwaltung
+   Single-file App. Datenschicht (DB) gekapselt -> Supabase-Tausch easy.
+   ===================================================================== */
+
+/* ---------- Defaults / Settings ---------- */
+const DEFAULTS = {
+  inhaber_name: "Thomas Hein",
+  inhaber_email: "th92482@gmail.com",
+  default_marge: 100,     // Soll-Marge in %
+  default_mwst: 7,        // % (7 oder 19) — pro Produkt überschreibbar
+  rundung: 0.10,          // Endpreis auf X € runden
+  theme: "dark"
+};
+
+/* ---------- Datenschicht (localStorage) ----------
+   Willst du später Supabase: nur diese 6 Funktionen async machen
+   und gegen den Supabase-JS-Client tauschen. Sonst ändert sich nichts. */
+const DB = {
+  products(){ try{return JSON.parse(localStorage.getItem('thein_products')||'[]')}catch(e){return[]} },
+  saveProducts(a){ localStorage.setItem('thein_products', JSON.stringify(a)) },
+  waste(){ try{return JSON.parse(localStorage.getItem('thein_waste')||'[]')}catch(e){return[]} },
+  saveWaste(a){ localStorage.setItem('thein_waste', JSON.stringify(a)) },
+  settings(){ try{return {...DEFAULTS, ...JSON.parse(localStorage.getItem('thein_settings')||'{}')}}catch(e){return{...DEFAULTS}} },
+  saveSettings(s){ localStorage.setItem('thein_settings', JSON.stringify(s)) }
+};
+
+/* ---------- State ---------- */
+let products = DB.products();
+let waste = DB.waste();
+let settings = DB.settings();
+let view = 'produkte';
+let search = '';
+let filter = { automat:false, abweichung:false, kat:'' };
+let html5qr = null;
+
+/* ---------- Helpers ---------- */
+const $ = id => document.getElementById(id);
+const num = v => { const n = parseFloat(String(v).replace(',','.')); return isNaN(n)?0:n; };
+const eur = v => num(v).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});
+const r2 = v => Math.round(num(v)*100)/100;
+const r4 = v => Math.round(num(v)*10000)/10000;
+const esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function nextId(arr){ let m=0; arr.forEach(x=>{const n=parseInt(x.id);if(!isNaN(n)&&n>m)m=n}); return String(m+1); }
+function toast(msg){ const t=$('toast'); t.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>'+esc(msg); t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2400); }
+
+/* =====================================================================
+   PREIS-ENGINE  — zentral & transparent. Hier die Geschäftslogik tunen.
+   Reihenfolge wie im Excel: Einkauf -> Pfand -> Marge -> Endpreis
+   ===================================================================== */
+function rechnePreis(p){
+  const mwstEk = num(p.mwst_ek ?? settings.default_mwst);
+  const roh = num(p.rohpreis);
+  let ekNetto, ekBrutto;
+  if((p.netto_brutto||'brutto') === 'brutto'){ ekBrutto = roh; ekNetto = roh/(1+mwstEk/100); }
+  else { ekNetto = roh; ekBrutto = roh*(1+mwstEk/100); }
+
+  const margeSoll = num(p.marge_soll ?? settings.default_marge);
+  const endNetto = ekNetto*(1+margeSoll/100);          // Wunsch-Netto
+  const mwstVk = num(p.mwst_vk ?? mwstEk);
+  let endBrutto = endNetto*(1+mwstVk/100);
+
+  const pfand = num(p.pfand_betrag);                    // Pfand als Brutto-Aufschlag
+  endBrutto += pfand;
+
+  const step = num(settings.rundung)||0.10;
+  const gerundet = Math.round(endBrutto/step)*step;     // = Preisvorschlag
+
+  const aktion = (p.aktionspreis!=null && p.aktionspreis!=='') ? num(p.aktionspreis) : null;
+  const verkauf = aktion!=null ? aktion : gerundet;     // tatsächlich verlangt
+  const schild = (p.preisschild!=null && p.preisschild!=='') ? num(p.preisschild) : gerundet;
+  const abweichung = Math.abs(schild-gerundet) > 0.001;
+
+  const verkaufNetto = (verkauf-pfand)/(1+mwstVk/100);
+  const deckungsbeitrag = verkaufNetto-ekNetto;
+  const margeIst = ekNetto>0 ? (verkaufNetto-ekNetto)/ekNetto*100 : 0;
+
+  return { ekNetto, ekBrutto, endNetto, endBrutto, gerundet, verkauf, schild, abweichung, deckungsbeitrag, margeIst, aktion:aktion!=null };
+}
+
+/* ---------- MHD-Helfer ---------- */
+function mhdTage(mhd){ if(!mhd) return null; const d=new Date(mhd); if(isNaN(d))return null; return Math.ceil((d - new Date())/86400000); }
+
+/* =====================================================================
+   NAVIGATION
+   ===================================================================== */
+const NAV = [
+  {id:'produkte', label:'Produkte', icon:'<path d="M3 9h18M9 21V9M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/>'},
+  {id:'verderb', label:'Warenverderb', icon:'<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/>'},
+  {id:'daten', label:'Import / Export', icon:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>'},
+  {id:'einstellungen', label:'Einstellungen', icon:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>'}
+];
+function renderNav(){
+  $('nav').innerHTML = NAV.map(n=>`<button class="${view===n.id?'active':''}" onclick="go('${n.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${n.icon}</svg>${n.label}</button>`).join('');
+  $('botnav').innerHTML = NAV.map(n=>`<button class="${view===n.id?'active':''}" onclick="go('${n.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${n.icon}</svg><span>${n.label.split(' ')[0]}</span></button>`).join('');
+}
+function go(v){ view=v; render(); }
+
+/* =====================================================================
+   RENDER
+   ===================================================================== */
+function render(){
+  renderNav();
+  $('fabwrap').style.display = view==='produkte' ? 'flex' : 'none';
+  if(view==='produkte') renderProdukte();
+  else if(view==='verderb') renderVerderb();
+  else if(view==='daten') renderDaten();
+  else if(view==='einstellungen') renderEinstellungen();
+  $('foot').textContent = `${products.length} Produkte · ${waste.length} Verderb`;
+}
+
+/* ---------- Produkte ---------- */
+function renderProdukte(){
+  const kats = [...new Set(products.map(p=>p.kategorie).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'de'));
+  let list = products.filter(p=>{
+    const s = search.toLowerCase();
+    if(s && !(String(p.name||'').toLowerCase().includes(s) || String(p.kategorie||'').toLowerCase().includes(s))) return false;
+    if(filter.automat && !p.im_automat) return false;
+    if(filter.kat && p.kategorie!==filter.kat) return false;
+    if(filter.abweichung && !rechnePreis(p).abweichung) return false;
+    return true;
+  });
+  list.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'de'));
+
+  const imAutomat = products.filter(p=>p.im_automat).length;
+  const abw = products.filter(p=>rechnePreis(p).abweichung).length;
+
+  $('content').innerHTML = `
+    <div class="page-head">
+      <div><h1>Produkte</h1><div class="sub">${products.length} gepflegt · ${imAutomat} im Automat · ${abw} mit Abweichung</div></div>
+      <div style="display:flex;gap:9px">
+        <button class="btn btn-ghost" onclick="openScanner()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M4 12h16"/></svg>Scannen</button>
+        <button class="btn btn-acc" onclick="openProduct(null)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>Neu</button>
+      </div>
+    </div>
+    <div class="toolbar">
+      <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="searchInput" placeholder="Produkt oder Kategorie suchen…" value="${esc(search)}"></div>
+      <select class="selstyle" id="katFilter">
+        <option value="">Alle Kategorien</option>
+        ${kats.map(k=>`<option value="${esc(k)}" ${filter.kat===k?'selected':''}>${esc(k)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="chips" style="margin-bottom:18px">
+      <button class="chip ${filter.automat?'on':''}" onclick="toggleFilter('automat')">Nur im Automat</button>
+      <button class="chip ${filter.abweichung?'on':''}" onclick="toggleFilter('abweichung')">Nur Abweichung</button>
+    </div>
+    ${list.length ? `<div class="grid">${list.map(cardHtml).join('')}</div>`
+      : `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg><div>${products.length? 'Keine Treffer.' : 'Noch keine Produkte. Lege eins an oder importiere deine JSON unter „Import / Export".'}</div></div>`}
+  `;
+  const si = $('searchInput');
+  si.oninput = e=>{ search=e.target.value; const c=si.selectionStart; renderProdukteList(); };
+  $('katFilter').onchange = e=>{ filter.kat=e.target.value; render(); };
+}
+function renderProdukteList(){ // leichter re-render nur der Liste (Fokus behalten)
+  const kats=null;
+  let list = products.filter(p=>{
+    const s=search.toLowerCase();
+    if(s && !(String(p.name||'').toLowerCase().includes(s)||String(p.kategorie||'').toLowerCase().includes(s)))return false;
+    if(filter.automat && !p.im_automat)return false;
+    if(filter.kat && p.kategorie!==filter.kat)return false;
+    if(filter.abweichung && !rechnePreis(p).abweichung)return false;
+    return true;
+  }).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'de'));
+  const grid=document.querySelector('.grid');
+  if(grid) grid.innerHTML = list.map(cardHtml).join('');
+}
+function cardHtml(p){
+  const c = rechnePreis(p);
+  const t = mhdTage(p.mhd);
+  const mhdHtml = p.mhd ? `<span class="${t!=null&&t<14?'mhd-soon':''}">MHD ${new Date(p.mhd).toLocaleDateString('de-DE')}</span>` : '';
+  return `<div class="card" onclick="openProduct('${p.id}')">
+    <div class="card-top">
+      <div><h3 class="card-name">${esc(p.name||'(ohne Name)')}</h3><div class="card-kat">${esc(p.kategorie||'—')}</div></div>
+      <div class="dot ${p.im_automat?'dot-on':'dot-off'}" title="${p.im_automat?'im Automat':'nicht im Automat'}"></div>
+    </div>
+    <div class="card-price">${eur(c.verkauf)}<span class="eur">€</span></div>
+    <div class="card-row">
+      ${c.abweichung ? `<span class="tag tag-warn">⚠ Abweichung</span>` : `<span class="tag tag-ok">✓ Vorschlag</span>`}
+      ${c.aktion ? `<span class="tag tag-action">Aktion</span>`:''}
+      <span class="tag tag-mut">DB ${eur(c.deckungsbeitrag)} €</span>
+    </div>
+    <div class="card-meta">${mhdHtml}<span>EK ${eur(c.ekBrutto)} €</span></div>
+  </div>`;
+}
+function toggleFilter(k){ filter[k]=!filter[k]; render(); }
+
+/* ---------- Produkt-Modal ---------- */
+function openProduct(id, prefill){
+  const p = id ? products.find(x=>x.id===id) : (prefill||{});
+  const isNew = !id;
+  const kats = [...new Set(products.map(x=>x.kategorie).filter(Boolean))].sort();
+  const g = (k,d='')=> p[k]!=null ? p[k] : d;
+  $('modal').innerHTML = `
+    <div class="modal-head">
+      <h2>${isNew?'Neues Produkt':'Produkt bearbeiten'}</h2>
+      <button class="x" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div class="fieldset"><div class="fgrid">
+        <div class="field full"><label>Produktname</label><input id="f_name" value="${esc(g('name'))}" placeholder="z.B. Coca Cola"></div>
+        <div class="field"><label>Kategorie</label><input id="f_kat" list="katlist" value="${esc(g('kategorie'))}" placeholder="z.B. Softdrink"><datalist id="katlist">${kats.map(k=>`<option value="${esc(k)}">`).join('')}</datalist></div>
+        <div class="field"><label>EAN / Barcode</label><input id="f_ean" value="${esc(g('ean'))}" placeholder="optional"></div>
+      </div></div>
+
+      <fieldset class="fieldset" style="border:none;padding:0;margin:0 0 20px"><legend>Einkauf</legend><div class="fgrid">
+        <div class="field"><label>Rohpreis (€)</label><input id="f_roh" type="text" inputmode="decimal" value="${g('rohpreis','')}" oninput="liveCalc()"></div>
+        <div class="field"><label>Roh ist…</label><select id="f_nb" onchange="liveCalc()"><option value="brutto" ${g('netto_brutto','brutto')==='brutto'?'selected':''}>brutto</option><option value="netto" ${g('netto_brutto')==='netto'?'selected':''}>netto</option></select></div>
+        <div class="field"><label>MwSt. Einkauf</label><select id="f_mwstek" onchange="liveCalc()"><option value="7" ${num(g('mwst_ek',settings.default_mwst))==7?'selected':''}>7 %</option><option value="19" ${num(g('mwst_ek',settings.default_mwst))==19?'selected':''}>19 %</option></select></div>
+        <div class="field"><label>Soll-Marge (%)</label><input id="f_marge" type="text" inputmode="decimal" value="${g('marge_soll',settings.default_marge)}" oninput="liveCalc()"></div>
+      </div></fieldset>
+
+      <fieldset class="fieldset" style="border:none;padding:0;margin:0 0 20px"><legend>Pfand</legend><div class="fgrid">
+        <div class="field"><label>Pfand (€, brutto)</label><input id="f_pfand" type="text" inputmode="decimal" value="${g('pfand_betrag','')}" oninput="liveCalc()"></div>
+        <div class="field"><label>Pfand MwSt. (%)</label><input id="f_pfandmwst" type="text" inputmode="decimal" value="${g('pfand_mwst','19')}"></div>
+      </div></fieldset>
+
+      <fieldset class="fieldset" style="border:none;padding:0;margin:0 0 20px"><legend>Verkauf & Status</legend><div class="fgrid">
+        <div class="field"><label>Preisschild (€) <span class="hint">leer = Vorschlag</span></label><input id="f_schild" type="text" inputmode="decimal" value="${g('preisschild','')}" oninput="liveCalc()"></div>
+        <div class="field"><label>Aktionspreis (€) <span class="hint">optional</span></label><input id="f_aktion" type="text" inputmode="decimal" value="${g('aktionspreis','')}" oninput="liveCalc()"></div>
+        <div class="field"><label>Bestand (Stück)</label><input id="f_bestand" type="text" inputmode="numeric" value="${g('bestand','999999')}"></div>
+        <div class="field"><label>MHD <span class="hint">optional</span></label><input id="f_mhd" type="date" value="${g('mhd','')}"></div>
+        <div class="field full"><label>Beliebtheit</label><select id="f_bel"><option ${g('beliebtheit','keine Angabe')==='keine Angabe'?'selected':''}>keine Angabe</option><option ${g('beliebtheit')==='niedrig'?'selected':''}>niedrig</option><option ${g('beliebtheit')==='mittel'?'selected':''}>mittel</option><option ${g('beliebtheit')==='hoch'?'selected':''}>hoch</option></select></div>
+        <div class="field full"><div class="inline-toggle"><label class="switch"><input type="checkbox" id="f_automat" ${p.im_automat?'checked':''}><span class="slider"></span></label><span>Im Automat enthalten</span></div></div>
+      </div></fieldset>
+
+      <div class="calc" id="calcBox"></div>
+
+      <div style="display:flex;gap:10px;margin-top:4px">
+        ${!isNew?`<button class="btn btn-danger" onclick="delProduct('${p.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>`:''}
+        <button class="btn btn-acc" style="flex:1;justify-content:center" onclick="saveProduct('${id||''}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6 9 17l-5-5"/></svg>${isNew?'Anlegen':'Speichern'}</button>
+      </div>
+    </div>`;
+  showModal();
+  liveCalc();
+}
+function readForm(){
+  return {
+    name:$('f_name').value.trim(), kategorie:$('f_kat').value.trim(), ean:$('f_ean').value.trim(),
+    rohpreis:num($('f_roh').value), netto_brutto:$('f_nb').value, mwst_ek:num($('f_mwstek').value),
+    marge_soll:num($('f_marge').value), pfand_betrag:num($('f_pfand').value), pfand_mwst:num($('f_pfandmwst').value),
+    preisschild:$('f_schild').value.trim()===''?'':num($('f_schild').value),
+    aktionspreis:$('f_aktion').value.trim()===''?'':num($('f_aktion').value),
+    bestand:num($('f_bestand').value), mhd:$('f_mhd').value, beliebtheit:$('f_bel').value,
+    im_automat:$('f_automat').checked
+  };
+}
+function liveCalc(){
+  const p = readForm();
+  const c = rechnePreis(p);
+  $('calcBox').innerHTML = `<div class="calc-grid">
+    <div class="calc-row"><span>EK netto</span><b>${eur(c.ekNetto)} €</b></div>
+    <div class="calc-row"><span>EK brutto</span><b>${eur(c.ekBrutto)} €</b></div>
+    <div class="calc-row"><span>Endpreis netto</span><b>${eur(c.endNetto)} €</b></div>
+    <div class="calc-row"><span>Endpreis brutto</span><b>${eur(c.endBrutto)} €</b></div>
+    <div class="calc-row"><span>Deckungsbeitrag</span><b class="${c.deckungsbeitrag>=0?'pos':'neg'}">${eur(c.deckungsbeitrag)} €</b></div>
+    <div class="calc-row"><span>Ist-Marge</span><b class="${c.margeIst>=num(p.marge_soll)-0.5?'pos':''}">${c.margeIst.toFixed(0)} %</b></div>
+    <div class="calc-hero"><span class="lbl">Preisvorschlag (gerundet)</span><span class="val">${eur(c.gerundet)} €</span></div>
+    ${c.abweichung?`<div class="calc-row" style="grid-column:1/-1;color:var(--warn)">⚠ Preisschild ${eur(c.schild)} € weicht vom Vorschlag ab</div>`:''}
+  </div>`;
+}
+function saveProduct(id){
+  const data = readForm();
+  if(!data.name){ toast('Bitte einen Namen eingeben'); return; }
+  if(id){ const i=products.findIndex(x=>x.id===id); products[i]={...products[i],...data}; }
+  else { products.push({id:nextId(products),...data}); }
+  DB.saveProducts(products); closeModal(); render(); toast(id?'Gespeichert':'Produkt angelegt');
+}
+function delProduct(id){
+  if(!confirm('Produkt wirklich löschen?')) return;
+  products = products.filter(x=>x.id!==id);
+  DB.saveProducts(products); closeModal(); render(); toast('Gelöscht');
+}
+
+/* =====================================================================
+   BARCODE-SCANNER  (html5-qrcode + OpenFoodFacts)
+   ===================================================================== */
+function openScanner(){
+  $('modal').innerHTML = `
+    <div class="modal-head"><h2>Barcode scannen</h2>
+      <button class="x" onclick="closeScanner()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body">
+      <div id="reader"></div>
+      <div class="scan-status" id="scanStatus">Kamera wird gestartet… (nur über HTTPS)</div>
+      <div class="field full"><label>Oder EAN manuell eingeben</label>
+        <div style="display:flex;gap:9px">
+          <input id="manualEan" inputmode="numeric" placeholder="z.B. 5449000000996" style="flex:1;padding:10px 12px;background:var(--bg2);border:1px solid var(--line);border-radius:9px;color:var(--txt)">
+          <button class="btn btn-acc" onclick="lookupEan($('manualEan').value)">Suchen</button>
+        </div>
+      </div>
+    </div>`;
+  showModal();
+  startCam();
+}
+function startCam(){
+  if(typeof Html5Qrcode === 'undefined'){ $('scanStatus').textContent='Scanner-Bibliothek nicht geladen — nutze die manuelle Eingabe.'; return; }
+  try{
+    html5qr = new Html5Qrcode("reader");
+    html5qr.start({facingMode:"environment"}, {fps:10, qrbox:{width:250,height:140}},
+      code=>{ stopCam(); $('scanStatus').textContent='Gescannt: '+code; lookupEan(code); },
+      ()=>{} )
+    .then(()=>$('scanStatus').textContent='Halte einen Barcode vor die Kamera…')
+    .catch(e=>$('scanStatus').textContent='Kamera nicht verfügbar ('+e+') — nutze die manuelle Eingabe.');
+  }catch(e){ $('scanStatus').textContent='Kamera-Fehler — nutze die manuelle Eingabe.'; }
+}
+function stopCam(){ if(html5qr){ try{ html5qr.stop().then(()=>html5qr.clear()).catch(()=>{}); }catch(e){} html5qr=null; } }
+function closeScanner(){ stopCam(); closeModal(); }
+async function lookupEan(ean){
+  ean=String(ean||'').trim(); if(!ean){ toast('Bitte EAN eingeben'); return; }
+  const existing = products.find(p=>p.ean===ean);
+  if(existing){ closeScanner(); toast('Produkt bereits vorhanden'); openProduct(existing.id); return; }
+  $('scanStatus').textContent='Suche '+ean+' bei OpenFoodFacts…';
+  let prefill = {ean};
+  try{
+    const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${ean}.json?fields=product_name,product_name_de,brands,categories`);
+    const j = await res.json();
+    if(j.status===1 && j.product){
+      const pr=j.product;
+      prefill.name = [pr.brands, pr.product_name_de||pr.product_name].filter(Boolean).join(' ').trim() || ('EAN '+ean);
+    }
+  }catch(e){}
+  closeScanner(); openProduct(null, prefill);
+}
+
+/* =====================================================================
+   WARENVERDERB  (Format wie der Finanzamt-Bogen)
+   ===================================================================== */
+function renderVerderb(){
+  const rows = [...waste].sort((a,b)=>String(a.warenbezeichnung||'').localeCompare(String(b.warenbezeichnung||''),'de'));
+  const sumBrutto = rows.reduce((s,w)=>s+num(w.ek_brutto)*num(w.menge||1),0);
+  $('content').innerHTML = `
+    <div class="page-head">
+      <div><h1>Warenverderb</h1><div class="sub">${rows.length} Positionen · Verderb-Wert (EK brutto) ${eur(sumBrutto)} €</div></div>
+      <div style="display:flex;gap:9px">
+        <button class="btn btn-ghost" onclick="exportVerderbCsv()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>CSV</button>
+        <button class="btn btn-acc" onclick="openVerderb(null)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>Position</button>
+      </div>
+    </div>
+    <div style="font-family:var(--mono);font-size:12.5px;color:var(--txt2);margin-bottom:14px">${esc(settings.inhaber_name)} · ${esc(settings.inhaber_email)} · ${new Date().getFullYear()} – Warenverderb</div>
+    ${rows.length?`<div class="tablewrap"><table>
+      <thead><tr><th>Warenbezeichnung</th><th>Menge</th><th>Einzelpreis</th><th>MwSt</th><th>MHD</th><th>EK Brutto</th><th>EK Netto</th><th>priv. Entnahme</th><th>Kommentar</th><th></th></tr></thead>
+      <tbody>${rows.map(w=>`<tr onclick="openVerderb('${w.id}')" style="cursor:pointer">
+        <td>${esc(w.warenbezeichnung)}</td>
+        <td class="num">${esc(w.menge||'')}</td>
+        <td class="num">${w.einzelpreis!=null&&w.einzelpreis!==''?eur(w.einzelpreis)+' €':'—'}</td>
+        <td class="num">${w.mwst!=null&&w.mwst!==''?w.mwst+' %':'—'}</td>
+        <td>${esc(w.mhd||'—')}</td>
+        <td class="num">${w.ek_brutto!=null&&w.ek_brutto!==''?eur(w.ek_brutto)+' €':'—'}</td>
+        <td class="num">${w.ek_netto!=null&&w.ek_netto!==''?eur(w.ek_netto)+' €':'—'}</td>
+        <td class="num">${esc(w.private_entnahme||'—')}</td>
+        <td>${esc(w.kommentar||'')}</td>
+        <td class="tdel num" onclick="event.stopPropagation();delVerderb('${w.id}')">✕</td>
+      </tr>`).join('')}</tbody></table></div>`
+      :`<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg><div>Noch keine Verderb-Positionen erfasst.</div></div>`}
+  `;
+}
+function openVerderb(id){
+  const w = id ? waste.find(x=>x.id===id) : {};
+  const isNew=!id; const g=(k,d='')=>w[k]!=null?w[k]:d;
+  const prodList = products.map(p=>esc(p.name)).filter(Boolean);
+  $('modal').innerHTML = `
+    <div class="modal-head"><h2>${isNew?'Verderb erfassen':'Position bearbeiten'}</h2>
+      <button class="x" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body"><div class="fgrid">
+      <div class="field full"><label>Warenbezeichnung</label><input id="w_name" list="prodlist" value="${esc(g('warenbezeichnung'))}"><datalist id="prodlist">${prodList.map(n=>`<option value="${n}">`).join('')}</datalist></div>
+      <div class="field"><label>Menge</label><input id="w_menge" inputmode="numeric" value="${g('menge','1')}"></div>
+      <div class="field"><label>Einzelpreis (€)</label><input id="w_einzel" inputmode="decimal" value="${g('einzelpreis','')}"></div>
+      <div class="field"><label>MwSt. (%)</label><select id="w_mwst"><option value="7" ${num(g('mwst',7))==7?'selected':''}>7 %</option><option value="19" ${num(g('mwst'))==19?'selected':''}>19 %</option></select></div>
+      <div class="field"><label>MHD</label><input id="w_mhd" value="${esc(g('mhd'))}" placeholder="z.B. 01.03.2025"></div>
+      <div class="field"><label>EK Brutto (€)</label><input id="w_ekb" inputmode="decimal" value="${g('ek_brutto','')}"></div>
+      <div class="field"><label>EK Netto (€)</label><input id="w_ekn" inputmode="decimal" value="${g('ek_netto','')}"></div>
+      <div class="field full"><label>private Entnahmemenge</label><input id="w_priv" value="${esc(g('private_entnahme'))}" placeholder="z.B. 6 (oder leer)"></div>
+      <div class="field full"><label>Kommentar</label><textarea id="w_kom" rows="2">${esc(g('kommentar'))}</textarea></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:18px">
+      ${!isNew?`<button class="btn btn-danger" onclick="delVerderb('${w.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>`:''}
+      <button class="btn btn-acc" style="flex:1;justify-content:center" onclick="saveVerderb('${id||''}')">${isNew?'Erfassen':'Speichern'}</button>
+    </div></div>`;
+  showModal();
+}
+function saveVerderb(id){
+  const d={ warenbezeichnung:$('w_name').value.trim(), menge:$('w_menge').value.trim(),
+    einzelpreis:$('w_einzel').value.trim()===''?'':num($('w_einzel').value), mwst:$('w_mwst').value,
+    mhd:$('w_mhd').value.trim(), ek_brutto:$('w_ekb').value.trim()===''?'':num($('w_ekb').value),
+    ek_netto:$('w_ekn').value.trim()===''?'':num($('w_ekn').value), private_entnahme:$('w_priv').value.trim(),
+    kommentar:$('w_kom').value.trim() };
+  if(!d.warenbezeichnung){ toast('Bitte Warenbezeichnung'); return; }
+  if(id){ const i=waste.findIndex(x=>x.id===id); waste[i]={...waste[i],...d}; }
+  else { waste.push({id:nextId(waste),...d}); }
+  DB.saveWaste(waste); closeModal(); render(); toast(id?'Gespeichert':'Erfasst');
+}
+function delVerderb(id){ if(!confirm('Position löschen?'))return; waste=waste.filter(x=>x.id!==id); DB.saveWaste(waste); closeModal&&closeModal(); render(); toast('Gelöscht'); }
+function exportVerderbCsv(){
+  const head=['Warenbezeichnung','Menge','Einzelpreis','MwSt [%]','MHD','EK Brutto','EK Netto','private Entnahmemenge','Kommentar'];
+  const lines=[`${settings.inhaber_name};${settings.inhaber_email}`, `${new Date().getFullYear()} - Warenverderb`, '', head.join(';')];
+  waste.forEach(w=>lines.push([w.warenbezeichnung,w.menge,w.einzelpreis,w.mwst,w.mhd,w.ek_brutto,w.ek_netto,w.private_entnahme,w.kommentar]
+    .map(v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`).join(';')));
+  download('warenverderb_'+new Date().getFullYear()+'.csv', '\uFEFF'+lines.join('\n'), 'text/csv');
+  toast('CSV exportiert');
+}
+
+/* =====================================================================
+   IMPORT / EXPORT
+   ===================================================================== */
+function renderDaten(){
+  $('content').innerHTML = `
+    <div class="page-head"><div><h1>Import / Export</h1><div class="sub">Daten ein- und ausgeben · kompatibel zu deiner bestehenden Seite</div></div></div>
+    <div class="setcard" style="margin-bottom:16px">
+      <h3>Bestehende JSON importieren</h3>
+      <p class="d">Liest deine aktuelle <code>preise_*.json</code> ein (Format deiner jetzigen app.js). MwSt &amp; netto/brutto werden aus EK-netto/brutto erkannt. Vorschläge werden frisch gerechnet — Margen kannst du danach pro Produkt feinjustieren.</p>
+      <input type="file" id="impFile" accept=".json,application/json" style="display:none" onchange="importJson(this)">
+      <div style="display:flex;gap:9px;flex-wrap:wrap">
+        <button class="btn btn-acc" onclick="$('impFile').click()">JSON wählen…</button>
+        <button class="btn btn-ghost" onclick="loadBackup()">Voll-Backup laden…</button>
+        <input type="file" id="bkFile" accept=".json" style="display:none" onchange="importBackup(this)">
+      </div>
+    </div>
+    <div class="setcard">
+      <h3>Exportieren</h3>
+      <p class="d">„Webseiten-JSON" hat exakt das Format deiner app.js — kannst du in deinen <code>export/</code>-Ordner legen, die alte Seite läuft weiter. „Voll-Backup" sichert alles (inkl. Verderb &amp; Einstellungen) zum Wiedereinspielen.</p>
+      <div style="display:flex;gap:9px;flex-wrap:wrap">
+        <button class="btn btn-acc" onclick="exportWebJson()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Webseiten-JSON</button>
+        <button class="btn btn-ghost" onclick="exportBackup()">Voll-Backup</button>
+        <button class="btn btn-ghost" onclick="exportVerderbCsv()">Verderb-CSV</button>
+      </div>
+    </div>`;
+}
+function importJson(input){
+  const file=input.files[0]; if(!file)return;
+  const fr=new FileReader();
+  fr.onload=()=>{ try{
+    const j=JSON.parse(fr.result);
+    const items=Array.isArray(j)?j:(j.items||[]);
+    let added=0;
+    items.forEach(it=>{
+      const ekn=num(it.ek_netto), ekb=num(it.ek_brutto), roh=num(it.rohpreis);
+      const mwst = ekn>0 ? Math.round((ekb/ekn-1)*100) : settings.default_mwst;
+      const nb = Math.abs(roh-ekb) <= Math.abs(roh-ekn) ? 'brutto':'netto';
+      products.push({
+        id: nextId(products),
+        name: it.name||'', kategorie: it.kategorie||'', ean: it.ean||'',
+        rohpreis: roh||ekb||ekn, netto_brutto: nb, mwst_ek: (mwst===7||mwst===19)?mwst:settings.default_mwst,
+        marge_soll: settings.default_marge,
+        preisschild: it.preisschild!=null?num(it.preisschild):'',
+        aktionspreis:'', pfand_betrag:0, pfand_mwst:19,
+        bestand: it.bestand!=null?num(it.bestand):999999,
+        mhd:'', beliebtheit:'keine Angabe',
+        im_automat: String(it.im_automat).toLowerCase()==='ja' || it.im_automat===true
+      });
+      added++;
+    });
+    DB.saveProducts(products); render(); toast(added+' Produkte importiert');
+  }catch(e){ alert('Fehler beim Lesen: '+e); } };
+  fr.readAsText(file);
+}
+function exportWebJson(){
+  const out={ lastUpdate: new Date().toISOString().slice(0,19).replace('T',' '),
+    items: products.map(p=>{ const c=rechnePreis(p); return {
+      id:String(p.id), name:p.name, kategorie:p.kategorie,
+      verkaufspreis:r2(c.verkauf), preisschild:r2(c.schild),
+      abweichung_zum_vorschlag:c.abweichung?'ja':'nein',
+      im_automat:p.im_automat?'ja':'nein', bestand:num(p.bestand),
+      rohpreis:r2(p.rohpreis), ek_netto:r4(c.ekNetto), ek_brutto:r4(c.ekBrutto) }; }) };
+  const stamp=new Date().toISOString().slice(0,10);
+  download(`preise_${stamp}.json`, JSON.stringify(out,null,2),'application/json');
+  toast('Webseiten-JSON exportiert');
+}
+function exportBackup(){
+  download('thein_backup_'+new Date().toISOString().slice(0,10)+'.json',
+    JSON.stringify({version:1, products, waste, settings},null,2),'application/json');
+  toast('Backup exportiert');
+}
+function loadBackup(){ $('bkFile').click(); }
+function importBackup(input){
+  const file=input.files[0]; if(!file)return; const fr=new FileReader();
+  fr.onload=()=>{ try{ const j=JSON.parse(fr.result);
+    if(!confirm('Backup einspielen? Überschreibt alle aktuellen Daten.'))return;
+    products=j.products||[]; waste=j.waste||[]; settings={...DEFAULTS,...(j.settings||{})};
+    DB.saveProducts(products); DB.saveWaste(waste); DB.saveSettings(settings); applyTheme(); render(); toast('Backup geladen');
+  }catch(e){ alert('Fehler: '+e); } };
+  fr.readAsText(file);
+}
+function download(name,content,type){
+  const blob=new Blob([content],{type}); const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url);
+}
+
+/* =====================================================================
+   EINSTELLUNGEN
+   ===================================================================== */
+function renderEinstellungen(){
+  $('content').innerHTML = `
+    <div class="page-head"><div><h1>Einstellungen</h1><div class="sub">Standardwerte für die Preis-Engine &amp; Stammdaten</div></div></div>
+    <div class="setcard">
+      <h3>Geschäftslogik</h3><p class="d">Diese Werte gelten als Standard, wenn ein Produkt nichts Eigenes gesetzt hat.</p>
+      <div class="fgrid">
+        <div class="field"><label>Standard Soll-Marge (%)</label><input id="s_marge" inputmode="decimal" value="${settings.default_marge}"></div>
+        <div class="field"><label>Standard MwSt. (%)</label><select id="s_mwst"><option value="7" ${settings.default_mwst==7?'selected':''}>7 %</option><option value="19" ${settings.default_mwst==19?'selected':''}>19 %</option></select></div>
+        <div class="field"><label>Endpreis runden auf (€)</label><select id="s_rund"><option value="0.05" ${settings.rundung==0.05?'selected':''}>0,05 €</option><option value="0.10" ${settings.rundung==0.10?'selected':''}>0,10 €</option><option value="0.50" ${settings.rundung==0.50?'selected':''}>0,50 €</option></select></div>
+      </div>
+      <h3 style="margin-top:22px">Inhaber (für Warenverderb-Export)</h3>
+      <div class="fgrid">
+        <div class="field"><label>Name</label><input id="s_name" value="${esc(settings.inhaber_name)}"></div>
+        <div class="field"><label>E-Mail</label><input id="s_mail" value="${esc(settings.inhaber_email)}"></div>
+      </div>
+      <h3 style="margin-top:22px">Darstellung</h3>
+      <div class="field full"><div class="inline-toggle"><label class="switch"><input type="checkbox" id="s_dark" ${settings.theme==='dark'?'checked':''} onchange="toggleTheme()"><span class="slider"></span></label><span>Dark Mode</span></div></div>
+      <button class="btn btn-acc" style="margin-top:20px;width:100%;justify-content:center" onclick="saveSettings()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6 9 17l-5-5"/></svg>Einstellungen speichern</button>
+      <button class="btn btn-danger" style="margin-top:10px;width:100%;justify-content:center" onclick="wipe()">Alle lokalen Daten löschen</button>
+    </div>`;
+}
+function saveSettings(){
+  settings.default_marge=num($('s_marge').value);
+  settings.default_mwst=num($('s_mwst').value);
+  settings.rundung=num($('s_rund').value);
+  settings.inhaber_name=$('s_name').value.trim();
+  settings.inhaber_email=$('s_mail').value.trim();
+  DB.saveSettings(settings); toast('Gespeichert'); render();
+}
+function wipe(){ if(!confirm('Wirklich ALLE Produkte, Verderb-Daten und Einstellungen löschen?'))return;
+  localStorage.removeItem('thein_products'); localStorage.removeItem('thein_waste'); localStorage.removeItem('thein_settings');
+  products=[]; waste=[]; settings={...DEFAULTS}; applyTheme(); render(); toast('Alles gelöscht'); }
+
+/* =====================================================================
+   THEME / MODAL / INIT
+   ===================================================================== */
+function applyTheme(){ document.body.dataset.theme=settings.theme; const b=$('themeBtnM'); if(b)b.textContent=settings.theme==='dark'?'🌙':'☀️'; }
+function toggleTheme(){ settings.theme=settings.theme==='dark'?'light':'dark'; DB.saveSettings(settings); applyTheme(); }
+function showModal(){ $('overlay').classList.add('show'); document.body.style.overflow='hidden'; }
+function closeModal(){ $('overlay').classList.remove('show'); document.body.style.overflow=''; }
+$('overlay').addEventListener('click',e=>{ if(e.target===$('overlay')){ stopCam(); closeModal(); } });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ stopCam(); closeModal(); } });
+
+applyTheme();
+render();
+</script>
+</body>
+</html>
