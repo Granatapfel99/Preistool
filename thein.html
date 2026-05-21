@@ -681,9 +681,11 @@ function renderDaten(){
     <div class="page-head"><div><h1>Import / Export</h1><div class="sub">Daten ein- und ausgeben · kompatibel zu deiner bestehenden Seite</div></div></div>
     <div class="setcard" style="margin-bottom:16px;border-color:var(--acc-dim)">
       <h3>★ Aktuelle Liste von deiner Seite laden <span style="font-size:12px;color:var(--acc)">empfohlen</span></h3>
-      <p class="d">Holt die JSON direkt von deinem GitHub — kein Datei-Speichern, kein Strg+S. Trag die aktuelle Datei-URL ein (das Datum im Namen ändert sich, wenn dein Kumpel neu exportiert) und klick laden.</p>
-      <div class="field full" style="margin-bottom:12px"><input id="urlInput" value="https://granatapfel99.github.io/export/2025-12-18/preise_2025-12-18_22-41-03.json"></div>
-      <button class="btn btn-acc" id="urlBtn" onclick="importFromUrl()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Aktuelle Liste laden</button>
+      <p class="d">Liest automatisch den Pfad aus, den deine Webseite (<code>app.js</code>) gerade nutzt — egal welches Datum die Datei hat. Ein Klick, kein Datei-Speichern.</p>
+      <button class="btn btn-acc" id="autoBtn" onclick="importAuto()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6M3.5 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Automatisch von Webseite laden</button>
+      <p class="d" style="margin:16px 0 6px">Oder URL manuell eintragen:</p>
+      <div class="field full" style="margin-bottom:11px"><input id="urlInput" value="https://granatapfel99.github.io/export/2025-12-18/preise_2025-12-18_22-41-03.json"></div>
+      <button class="btn btn-ghost btn-sm" id="urlBtn" onclick="importFromUrl()">Diese URL laden</button>
     </div>
     <div class="setcard" style="margin-bottom:16px">
       <h3>Datei importieren</h3>
@@ -751,6 +753,26 @@ async function importFromUrl(){
     doImport(Array.isArray(j)?j:(j.items||[]));
   }catch(e){
     alert('Konnte nicht laden:\n'+e+'\n\nTipp: Öffne die URL einmal im Browser. Erscheint dort Text/JSON, stimmt sie. Bei „404" ist das Datum im Dateinamen anders.');
+  }
+  btn.innerHTML=old; btn.disabled=false;
+}
+/* Liest den aktuell verlinkten JSON-Pfad direkt aus der app.js der Webseite. */
+async function importAuto(){
+  const btn=$('autoBtn'); const old=btn.innerHTML; btn.innerHTML='Lädt…'; btn.disabled=true;
+  try{
+    const ajs=await fetch('app.js',{cache:'no-store'});
+    if(!ajs.ok) throw new Error('app.js nicht gefunden (HTTP '+ajs.status+'). Liegt thein.html im selben Ordner wie app.js?');
+    const code=await ajs.text();
+    const m=code.match(/JSON_FILE\s*=\s*["'`]([^"'`]+)["'`]/);
+    if(!m) throw new Error('In app.js kein JSON_FILE-Pfad gefunden.');
+    const jsonUrl=new URL(m[1], location.href).href;
+    if($('urlInput')) $('urlInput').value=jsonUrl;
+    const res=await fetch(jsonUrl,{cache:'no-store'});
+    if(!res.ok) throw new Error('JSON nicht ladbar (HTTP '+res.status+'):\n'+jsonUrl);
+    const j=await res.json();
+    doImport(Array.isArray(j)?j:(j.items||[]));
+  }catch(e){
+    alert('Automatik fehlgeschlagen:\n'+e+'\n\nFallback: trag die URL unten manuell ein oder importiere eine Datei.');
   }
   btn.innerHTML=old; btn.disabled=false;
 }
