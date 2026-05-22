@@ -102,9 +102,13 @@ input,select,textarea{font-family:inherit;font-size:15px}
 .vbtn svg{width:18px;height:18px}
 .vbtn:hover{color:var(--txt);background:var(--panel2)}
 .vbtn.on{background:rgba(74,222,94,.14);color:var(--acc)}
-.sortwrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:1;min-width:0}
-.sortlbl{font-size:12px;color:var(--txt3);font-family:var(--mono);white-space:nowrap}
-.sortwrap .selstyle{padding:8px 10px;font-size:13.5px}
+.sortbar{display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;margin-bottom:18px}
+.sortgrp{display:flex;flex-direction:column;gap:5px;min-width:0}
+.sortlbl{font-size:10.5px;color:var(--txt3);font-family:var(--mono);text-transform:uppercase;letter-spacing:.6px}
+.sortpick{display:flex;gap:6px}
+.sortpick .selstyle{padding:8px 10px;font-size:13.5px}
+.sortgrp>.selstyle{padding:8px 10px;font-size:13.5px}
+.sortchips{margin-left:auto;align-self:center;padding-bottom:2px}
 
 /* List view */
 .plist{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--panel)}
@@ -171,7 +175,16 @@ input,select,textarea{font-family:inherit;font-size:15px}
 .field input,.field select,.field textarea{padding:10px 12px;background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius-sm);color:var(--txt);outline:none;transition:.12s;width:100%}
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--acc-dim);box-shadow:0 0 0 3px rgba(74,222,94,.1)}
 .field .hint{font-size:11px;color:var(--txt3)}
-.katchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+.field .req{font-size:11px;color:var(--warn);font-weight:600}
+.katchips{display:flex;flex-wrap:wrap;gap:6px}
+.katcombo{display:flex;gap:7px}
+.katcombo input{flex:1;min-width:0}
+.katcaret{width:44px;flex-shrink:0;background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius-sm);color:var(--txt2);display:flex;align-items:center;justify-content:center;transition:.12s}
+.katcaret svg{width:18px;height:18px;transition:transform .15s}
+.katcaret:hover{border-color:var(--acc-dim);color:var(--acc)}
+.katcombo.open .katcaret svg{transform:rotate(180deg)}
+.katpanel{display:none;margin-top:8px;max-height:210px;overflow-y:auto;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--bg2);padding:11px}
+.katpanel.open{display:block}
 .katchip{padding:5px 11px;background:var(--panel2);border:1px solid var(--line);border-radius:99px;font-size:12.5px;color:var(--txt2);transition:.1s}
 .katchip:hover{border-color:var(--acc-dim);color:var(--acc)}
 .inline-toggle{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius-sm)}
@@ -249,7 +262,12 @@ tbody tr:hover{background:var(--panel2)}
   .calc-grid{grid-template-columns:1fr}
   .fab-wrap{bottom:80px}
   .prow-db{display:none}
-  .sortwrap{order:2;width:100%}
+  .sortbar{gap:11px}
+  .sortgrp{width:100%}
+  .sortpick{width:100%}
+  .sortpick .selstyle{flex:1;min-width:0}
+  .sortgrp>.selstyle{width:100%}
+  .sortchips{margin-left:0;width:100%;align-self:stretch}
   .botnav{display:flex;position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:1px solid var(--line);z-index:35;padding:6px 4px 8px}
   .botnav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px;color:var(--txt3);font-size:10.5px;font-weight:600}
   .botnav button svg{width:21px;height:21px}
@@ -606,15 +624,19 @@ function renderProdukte(){
         <button class="vbtn ${viewMode==='list'?'on':''}" id="vList" title="Liste" onclick="setViewMode('list')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></button>
       </div>
     </div>
-    <div class="toolbar" style="margin-top:-6px">
-      <div class="sortwrap">
-        <span class="sortlbl">Sortieren</span>
-        <select class="selstyle" id="sort1">${sortOpts(sort1)}</select>
-        <button class="vbtn" id="sortDir" title="Richtung" onclick="toggleSortDir()">${sort1dir==='asc'?'↑':'↓'}</button>
-        <span class="sortlbl">dann</span>
+    <div class="sortbar">
+      <div class="sortgrp">
+        <span class="sortlbl">Sortieren nach</span>
+        <div class="sortpick">
+          <select class="selstyle" id="sort1">${sortOpts(sort1)}</select>
+          <button class="vbtn" id="sortDir" title="Richtung umkehren" onclick="toggleSortDir()">${sort1dir==='asc'?'↑':'↓'}</button>
+        </div>
+      </div>
+      <div class="sortgrp">
+        <span class="sortlbl">dann nach</span>
         <select class="selstyle" id="sort2"><option value="">—</option>${sortOpts(sort2)}</select>
       </div>
-      <div class="chips">
+      <div class="chips sortchips">
         <button class="chip ${filter.automat?'on':''}" onclick="toggleFilter('automat')">Nur im Automat</button>
         <button class="chip ${filter.abweichung?'on':''}" onclick="toggleFilter('abweichung')">Nur Abweichung</button>
       </div>
@@ -685,8 +707,12 @@ function openProduct(id, prefill){
     <div class="modal-body">
       <div class="fieldset"><div class="fgrid">
         <div class="field full"><label>Produktname</label><input id="f_name" value="${esc(g('name'))}" placeholder="z.B. Coca Cola"></div>
-        <div class="field"><label>Kategorie</label><input id="f_kat" value="${esc(g('kategorie'))}" placeholder="z.B. Softdrink" autocomplete="off">
-          ${kats.length?`<div class="katchips">${kats.map(k=>`<button type="button" class="katchip" onclick="$('f_kat').value='${esc(k).replace(/'/g,"\\'")}'">${esc(k)}</button>`).join('')}</div>`:''}
+        <div class="field"><label>Kategorie</label>
+          <div class="katcombo">
+            <input id="f_kat" value="${esc(g('kategorie'))}" placeholder="z.B. Softdrink" autocomplete="off" oninput="filterKatChips()" onfocus="openKatPanel()">
+            ${kats.length?`<button type="button" class="katcaret" onclick="toggleKatPanel()" aria-label="Kategorien anzeigen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></button>`:''}
+          </div>
+          ${kats.length?`<div class="katpanel" id="katPanel"><div class="katchips" id="katChips">${kats.map(k=>`<button type="button" class="katchip" data-cat="${esc(k.toLowerCase())}" onclick="pickKat(this)">${esc(k)}</button>`).join('')}</div></div>`:''}
         </div>
         <div class="field"><label>EAN / Barcode</label><input id="f_ean" value="${esc(g('ean'))}" placeholder="optional"></div>
       </div></div>
@@ -707,7 +733,7 @@ function openProduct(id, prefill){
         <div class="field"><label>Preisschild (€) <span class="hint">leer = Vorschlag</span></label><input id="f_schild" type="text" inputmode="decimal" value="${g('preisschild','')}" oninput="liveCalc()"></div>
         <div class="field"><label>Aktionspreis (€) <span class="hint">optional</span></label><input id="f_aktion" type="text" inputmode="decimal" value="${g('aktionspreis','')}" oninput="liveCalc()"></div>
         <div class="field"><label>Bestand (Stück)</label><input id="f_bestand" type="text" inputmode="numeric" value="${g('bestand','999999')}"></div>
-        <div class="field"><label>MHD <span class="hint">optional</span></label><input id="f_mhd" type="date" value="${g('mhd','')}"></div>
+        <div class="field"><label>MHD <span class="req">*Pflicht</span></label><input id="f_mhd" type="date" value="${g('mhd','')}"></div>
         <div class="field full"><label>Beliebtheit</label><select id="f_bel"><option ${g('beliebtheit','keine Angabe')==='keine Angabe'?'selected':''}>keine Angabe</option><option ${g('beliebtheit')==='niedrig'?'selected':''}>niedrig</option><option ${g('beliebtheit')==='mittel'?'selected':''}>mittel</option><option ${g('beliebtheit')==='hoch'?'selected':''}>hoch</option></select></div>
         <div class="field full"><div class="inline-toggle"><label class="switch"><input type="checkbox" id="f_automat" ${p.im_automat?'checked':''}><span class="slider"></span></label><span>Im Automat enthalten</span></div></div>
       </div></fieldset>
@@ -747,9 +773,21 @@ function liveCalc(){
     ${c.abweichung?`<div class="calc-row" style="grid-column:1/-1;color:var(--warn)">⚠ Preisschild ${eur(c.schild)} € weicht vom Vorschlag ab</div>`:''}
   </div>`;
 }
+/* Kategorie-Dropdown (aufklappbar, mobilfest) */
+function openKatPanel(){ const p=$('katPanel'); if(p)p.classList.add('open'); const c=document.querySelector('.katcombo'); if(c)c.classList.add('open'); }
+function closeKatPanel(){ const p=$('katPanel'); if(p)p.classList.remove('open'); const c=document.querySelector('.katcombo'); if(c)c.classList.remove('open'); }
+function toggleKatPanel(){ const p=$('katPanel'); if(!p)return; p.classList.contains('open')?closeKatPanel():openKatPanel(); }
+function pickKat(btn){ const f=$('f_kat'); if(f)f.value=btn.textContent; filterKatChips(); closeKatPanel(); }
+function filterKatChips(){
+  const q=($('f_kat')?$('f_kat').value:'').toLowerCase().trim();
+  const chips=document.querySelectorAll('#katChips .katchip'); let any=false;
+  chips.forEach(c=>{ const show=!q||c.dataset.cat.includes(q); c.style.display=show?'':'none'; if(show)any=true; });
+  if(q && any) openKatPanel();
+}
 function saveProduct(id){
   const data = readForm();
-  if(!data.name){ toast('Bitte einen Namen eingeben'); return; }
+  if(!data.name){ toast('Bitte einen Namen eingeben'); const e=$('f_name'); if(e)e.focus(); return; }
+  if(!data.mhd){ toast('Bitte MHD eintragen (Pflichtfeld)'); const e=$('f_mhd'); if(e){ e.focus(); try{e.showPicker&&e.showPicker();}catch(_){}} return; }
   data._updated = new Date().toISOString();   // für „zuletzt geändert"-Sortierung
   let saved;
   if(id){ const i=products.findIndex(x=>x.id===id); saved = products[i] = {...products[i], ...data}; }
@@ -1203,6 +1241,7 @@ function showModal(){ $('overlay').classList.add('show'); document.body.style.ov
 function closeModal(){ $('overlay').classList.remove('show'); document.body.style.overflow=''; }
 $('overlay').addEventListener('click',e=>{ if(e.target===$('overlay')){ stopCam(); closeModal(); } });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ stopCam(); closeModal(); } });
+document.addEventListener('click',e=>{ if($('katPanel') && !e.target.closest('.katcombo') && !e.target.closest('.katpanel')) closeKatPanel(); }, true);
 
 /* =====================================================================
    LIVE-SYNC  (Supabase Realtime, mit Selbstheilung)
