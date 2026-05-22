@@ -307,6 +307,7 @@ let view = 'produkte';
 let search = '';
 let filter = { automat:false, abweichung:false, kat:'' };
 let html5qr = null;
+let torchTrack = null;
 
 /* ---------- Helpers ---------- */
 const $ = id => document.getElementById(id);
@@ -556,6 +557,10 @@ function openScanner(){
     <div class="modal-body">
       <div id="reader"></div>
       <div class="scan-status" id="scanStatus">Kamera wird gestartet… (nur über HTTPS)</div>
+      <div style="display:flex;gap:9px;align-items:center;margin:6px 0 2px">
+        <button class="btn btn-ghost btn-sm" id="torchBtn" style="display:none" onclick="toggleTorch()">🔦 Aus</button>
+        <span style="font-size:12px;color:var(--txt3)">Barcode ruhig in den Rahmen halten, ggf. etwas Abstand.</span>
+      </div>
       <div class="field full"><label>Oder EAN manuell eingeben</label>
         <div style="display:flex;gap:9px">
           <input id="manualEan" inputmode="numeric" placeholder="z.B. 5449000000996" style="flex:1;padding:10px 12px;background:var(--bg2);border:1px solid var(--line);border-radius:9px;color:var(--txt)">
@@ -566,18 +571,77 @@ function openScanner(){
   showModal();
   startCam();
 }
-function startCam(){
-  if(typeof Html5Qrcode === 'undefined'){ $('scanStatus').textContent='Scanner-Bibliothek nicht geladen — nutze die manuelle Eingabe.'; return; }
-  try{
-    html5qr = new Html5Qrcode("reader");
-    html5qr.start({facingMode:"environment"}, {fps:10, qrbox:{width:250,height:140}},
-      code=>{ stopCam(); $('scanStatus').textContent='Gescannt: '+code; lookupEan(code); },
-      ()=>{} )
-    .then(()=>$('scanStatus').textContent='Halte einen Barcode vor die Kamera…')
-    .catch(e=>$('scanStatus').textContent='Kamera nicht verfügbar ('+e+') — nutze die manuelle Eingabe.');
-  }catch(e){ $('scanStatus').textContent='Kamera-Fehler — nutze die manuelle Eingabe.'; }
+function setScanStatus(t){ const el=$('scanStatus'); if(el) el.textContent=t; }
+/* Nur Handels-Barcodes -> schneller & treffsicherer als „alle Formate". */
+function retailFormats(){
+  const F = Html5QrcodeSupportedFormats;
+  return [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.UPC_EAN_EXTENSION, F.CODE_128, F.ITF];
 }
-function stopCam(){ if(html5qr){ try{ html5qr.stop().then(()=>html5qr.clear()).catch(()=>{}); }catch(e){} html5qr=null; } }
+async function startCam(){
+  if(typeof Html5Qrcode === 'undefined'){ setScanStatus('Scanner-Bibliothek nicht geladen — nutze die manuelle Eingabe.'); return; }
+  setScanStatus('Kamera wird gestartet…');
+  try{
+    html5qr = new Html5Qrcode("reader", {
+      formatsToSupport: retailFormats(),
+      experimentalFeatures: { useBarCodeDetectorIfSupported: true }, // nativer, scharfer Decoder wo verfügbar
+      verbose: false
+    });
+  }catch(e){ setScanStatus('Scanner-Init fehlgeschlagen — manuelle Eingabe nutzen.'); return; }
+
+  /* Beste Rückkamera wählen: Ultraweit-/Tele-/Frontlinsen fokussieren nah schlecht. */
+  let cam = { facingMode: "environment" };
+  try{
+    const cams = await Html5Qrcode.getCameras();
+    if(cams && cams.length){
+      const bad = /front|user|wide|ultra|tele|depth|truedepth|ir\b/i;
+      const back = cams.filter(c => /back|rear|environment|rück|hinten/i.test(c.label||''));
+      const pick = back.find(c=>!bad.test(c.label||'')) || back[0]
+                 || cams.find(c=>!bad.test(c.label||'')) || cams[cams.length-1];
+      if(pick) cam = { deviceId: { exact: pick.id } };
+    }
+  }catch(e){ /* getCameras kann scheitern -> facingMode-Fallback bleibt */ }
+
+  const config = {
+    fps: 15,
+    qrbox: (vw, vh) => { const s = Math.floor(Math.min(vw, vh) * 0.82); return { width:s, height:Math.floor(s*0.62) }; },
+    aspectRatio: (window.innerHeight > window.innerWidth) ? 1.0 : 1.7777,
+    videoConstraints: {
+      ...(cam.deviceId ? { deviceId: cam.deviceId } : { facingMode: { ideal: "environment" } }),
+      width:  { ideal: 1920 },   // höhere Auflösung -> dichte/kleine EAN lesbar
+      height: { ideal: 1080 },
+      advanced: [{ focusMode: "continuous" }] // Dauer-Autofokus
+    }
+  };
+
+  html5qr.start(
+    cam, config,
+    code => { try{ navigator.vibrate && navigator.vibrate(60); }catch(_){}
+              stopCam(); setScanStatus('Gescannt: '+code); lookupEan(code); },
+    () => {} // Frame-Fehler ignorieren
+  )
+  .then(()=>{ setScanStatus('Halte einen Barcode in den Rahmen…'); setupTorch(); })
+  .catch(e=>setScanStatus('Kamera nicht verfügbar ('+e+') — nutze die manuelle Eingabe.'));
+}
+function setupTorch(){
+  try{
+    const video = $('reader') && $('reader').querySelector('video');
+    const track = video && video.srcObject && video.srcObject.getVideoTracks()[0];
+    if(!track || !track.getCapabilities) return;
+    if(track.getCapabilities().torch){ torchTrack = track; const b=$('torchBtn'); if(b) b.style.display='inline-flex'; }
+  }catch(e){}
+}
+async function toggleTorch(){
+  if(!torchTrack){ toast('Blitz nicht verfügbar'); return; }
+  try{
+    const on = !torchTrack._on;
+    await torchTrack.applyConstraints({ advanced:[{ torch:on }] });
+    torchTrack._on = on; const b=$('torchBtn'); if(b) b.textContent = on?'🔦 An':'🔦 Aus';
+  }catch(e){ toast('Blitz nicht unterstützt'); }
+}
+function stopCam(){
+  torchTrack=null; const b=$('torchBtn'); if(b){ b.style.display='none'; b.textContent='🔦 Aus'; }
+  if(html5qr){ try{ html5qr.stop().then(()=>html5qr.clear()).catch(()=>{}); }catch(e){} html5qr=null; }
+}
 function closeScanner(){ stopCam(); closeModal(); }
 async function lookupEan(ean){
   ean=String(ean||'').trim(); if(!ean){ toast('Bitte EAN eingeben'); return; }
