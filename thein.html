@@ -96,6 +96,27 @@ input,select,textarea{font-family:inherit;font-size:15px}
 .chip.on{background:rgba(74,222,94,.13);border-color:var(--acc-dim);color:var(--acc)}
 .selstyle{padding:9px 12px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-sm);color:var(--txt);outline:none}
 
+/* View toggle + sort bar */
+.viewtog{display:flex;gap:2px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-sm);padding:3px}
+.vbtn{width:34px;height:34px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:var(--txt2);font-size:15px;font-weight:700}
+.vbtn svg{width:18px;height:18px}
+.vbtn:hover{color:var(--txt);background:var(--panel2)}
+.vbtn.on{background:rgba(74,222,94,.14);color:var(--acc)}
+.sortwrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:1;min-width:0}
+.sortlbl{font-size:12px;color:var(--txt3);font-family:var(--mono);white-space:nowrap}
+.sortwrap .selstyle{padding:8px 10px;font-size:13.5px}
+
+/* List view */
+.plist{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--panel)}
+.prow{display:flex;align-items:center;gap:12px;padding:11px 15px;border-bottom:1px solid var(--line);cursor:pointer;transition:.1s}
+.prow:last-child{border-bottom:none}
+.prow:hover{background:var(--panel2)}
+.prow-main{flex:1;min-width:0}
+.prow-name{font-weight:600;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow-sub{font-size:12px;color:var(--txt3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.prow-db{font-family:var(--mono);font-size:12.5px;color:var(--txt2);white-space:nowrap}
+.prow-price{font-family:var(--mono);font-weight:600;font-size:16px;white-space:nowrap;min-width:74px;text-align:right}
+
 /* ---------- Product grid ---------- */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:13px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:15px 16px;transition:.14s;cursor:pointer;position:relative;overflow:hidden}
@@ -150,6 +171,9 @@ input,select,textarea{font-family:inherit;font-size:15px}
 .field input,.field select,.field textarea{padding:10px 12px;background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius-sm);color:var(--txt);outline:none;transition:.12s;width:100%}
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--acc-dim);box-shadow:0 0 0 3px rgba(74,222,94,.1)}
 .field .hint{font-size:11px;color:var(--txt3)}
+.katchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+.katchip{padding:5px 11px;background:var(--panel2);border:1px solid var(--line);border-radius:99px;font-size:12.5px;color:var(--txt2);transition:.1s}
+.katchip:hover{border-color:var(--acc-dim);color:var(--acc)}
 .inline-toggle{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius-sm)}
 .switch{position:relative;width:42px;height:24px;flex-shrink:0}
 .switch input{display:none}
@@ -224,6 +248,8 @@ tbody tr:hover{background:var(--panel2)}
   .fgrid{grid-template-columns:1fr}
   .calc-grid{grid-template-columns:1fr}
   .fab-wrap{bottom:80px}
+  .prow-db{display:none}
+  .sortwrap{order:2;width:100%}
   .botnav{display:flex;position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:1px solid var(--line);z-index:35;padding:6px 4px 8px}
   .botnav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px;color:var(--txt3);font-size:10.5px;font-weight:600}
   .botnav button svg{width:21px;height:21px}
@@ -395,9 +421,16 @@ let search = '';
 let filter = { automat:false, abweichung:false, kat:'' };
 let html5qr = null;
 let torchTrack = null;
+let scanHandled = false;            // verhindert Doppel-Auslösung beim Scan
 let syncState = USE_CLOUD ? 'connecting' : 'lokal';
 let rtChannel = null, reloadTimer = null;
 const SYNC_LABEL = { lokal:'lokal', connecting:'verbinde…', live:'● live', reconnecting:'reconnect…', offline:'offline' };
+/* Ansicht & Sortierung — pro Gerät gemerkt (wie das Theme). */
+let viewMode = (()=>{ try{ return localStorage.getItem('thein_view')||'grid'; }catch(e){ return 'grid'; } })();
+let sort1 = (()=>{ try{ return localStorage.getItem('thein_sort1')||'name'; }catch(e){ return 'name'; } })();
+let sort1dir = (()=>{ try{ return localStorage.getItem('thein_sort1dir')||'asc'; }catch(e){ return 'asc'; } })();
+let sort2 = (()=>{ try{ return localStorage.getItem('thein_sort2')||''; }catch(e){ return ''; } })();
+function saveViewPrefs(){ try{ localStorage.setItem('thein_view',viewMode); localStorage.setItem('thein_sort1',sort1); localStorage.setItem('thein_sort1dir',sort1dir); localStorage.setItem('thein_sort2',sort2); }catch(e){} }
 
 /* ---------- Helpers ---------- */
 const $ = id => document.getElementById(id);
@@ -408,6 +441,74 @@ const r4 = v => Math.round(num(v)*10000)/10000;
 const esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function nextId(arr){ let m=0; arr.forEach(x=>{const n=parseInt(x.id);if(!isNaN(n)&&n>m)m=n}); return String(m+1); }
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); } // geräteübergreifend eindeutig
+
+/* ---------- Suche: tolerant (Teilbegriffe, Umlaute, Tippfehler) ---------- */
+function norm(s){
+  return String(s==null?'':s).toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')   // Akzente weg
+    .replace(/ß/g,'ss').replace(/[^a-z0-9]+/g,' ').trim();
+}
+function lev(a,b){ // kleine Levenshtein-Distanz (für kurze Tokens, schnell genug)
+  if(a===b) return 0; const m=a.length,n=b.length; if(!m)return n; if(!n)return m;
+  let prev=Array.from({length:n+1},(_,i)=>i), cur=new Array(n+1);
+  for(let i=1;i<=m;i++){ cur[0]=i;
+    for(let j=1;j<=n;j++){ const c=a[i-1]===b[j-1]?0:1; cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+c); }
+    [prev,cur]=[cur,prev];
+  }
+  return prev[n];
+}
+function fuzzyMatch(query, haystack){
+  const q=norm(query); if(!q) return true;
+  const h=norm(haystack); if(h.includes(q)) return true;            // schneller Volltreffer
+  if(h.replace(/ /g,'').includes(q.replace(/ /g,''))) return true;  // ohne Leerzeichen („cocacola")
+  const hw=h.split(' ');
+  return q.split(' ').every(qt=>{
+    if(!qt) return true;
+    if(h.includes(qt)) return true;                                  // Teilbegriff irgendwo
+    const tol = qt.length>=5 ? 2 : (qt.length>=3 ? 1 : 0);           // Tippfehler-Toleranz nach Länge
+    return hw.some(w => w.includes(qt) || (Math.abs(w.length-qt.length)<=tol && lev(w,qt)<=tol));
+  });
+}
+/* Marke = Teil vor dem ersten „ - " im Namen (Format „Marke - Artikel - Menge"). */
+function brandOf(p){ const n=String(p.name||''); const i=n.indexOf(' - '); return (i>0?n.slice(0,i):n).trim(); }
+const BELIEBT_RANK = { 'hoch':3,'mittel':2,'niedrig':1,'keine angabe':0,'':0 };
+
+/* ---------- Zentrale Filter+Sortier-Logik (eine Quelle der Wahrheit) ---------- */
+const SORT_FIELDS = {
+  name:    { label:'Name',           val:p=>norm(p.name), type:'str' },
+  marke:   { label:'Marke',          val:p=>norm(brandOf(p)), type:'str' },
+  kategorie:{label:'Kategorie',      val:p=>norm(p.kategorie), type:'str' },
+  preis:   { label:'Preis',          val:p=>rechnePreis(p).verkauf, type:'num' },
+  db:      { label:'Deckungsbeitrag',val:p=>rechnePreis(p).deckungsbeitrag, type:'num' },
+  bestand: { label:'Bestand',        val:p=>num(p.bestand), type:'num' },
+  beliebt: { label:'Beliebtheit',    val:p=>BELIEBT_RANK[String(p.beliebtheit||'').toLowerCase()]??0, type:'num' },
+  mhd:     { label:'Ablaufdatum (MHD)',val:p=>{ const t=mhdTage(p.mhd); return t==null?Infinity:t; }, type:'num' },
+  geaendert:{label:'Zuletzt geändert',val:p=>p._updated?Date.parse(p._updated)||0:0, type:'num' }
+};
+function cmpBy(key, dir){
+  const f=SORT_FIELDS[key]; if(!f) return ()=>0;
+  const s = dir==='desc' ? -1 : 1;
+  return (a,b)=>{
+    const va=f.val(a), vb=f.val(b);
+    let c = f.type==='num' ? (va-vb) : String(va).localeCompare(String(vb),'de');
+    if(Number.isNaN(c)) c=0;
+    return c*s;
+  };
+}
+function getVisibleProducts(){
+  let list = products.filter(p=>{
+    if(search && !fuzzyMatch(search, [p.name,p.kategorie,p.ean].filter(Boolean).join(' '))) return false;
+    if(filter.automat && !p.im_automat) return false;
+    if(filter.kat && p.kategorie!==filter.kat) return false;
+    if(filter.abweichung && !rechnePreis(p).abweichung) return false;
+    return true;
+  });
+  const c1=cmpBy(sort1, sort1dir);
+  const c2= sort2 ? cmpBy(sort2,'asc') : null;
+  const cName = cmpBy('name','asc');
+  list.sort((a,b)=>{ let c=c1(a,b); if(c) return c; if(c2){ c=c2(a,b); if(c) return c; } return cName(a,b); });
+  return list;
+}
 function toast(msg){ const t=$('toast'); t.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>'+esc(msg); t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2400); }
 
 /* =====================================================================
@@ -480,18 +581,10 @@ function setSync(s){ syncState=s; updateFoot(); }
 /* ---------- Produkte ---------- */
 function renderProdukte(){
   const kats = [...new Set(products.map(p=>p.kategorie).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'de'));
-  let list = products.filter(p=>{
-    const s = search.toLowerCase();
-    if(s && !(String(p.name||'').toLowerCase().includes(s) || String(p.kategorie||'').toLowerCase().includes(s))) return false;
-    if(filter.automat && !p.im_automat) return false;
-    if(filter.kat && p.kategorie!==filter.kat) return false;
-    if(filter.abweichung && !rechnePreis(p).abweichung) return false;
-    return true;
-  });
-  list.sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'de'));
-
+  const list = getVisibleProducts();
   const imAutomat = products.filter(p=>p.im_automat).length;
   const abw = products.filter(p=>rechnePreis(p).abweichung).length;
+  const sortOpts = (sel)=>Object.entries(SORT_FIELDS).map(([k,f])=>`<option value="${k}" ${sel===k?'selected':''}>${f.label}</option>`).join('');
 
   $('content').innerHTML = `
     <div class="page-head">
@@ -503,36 +596,48 @@ function renderProdukte(){
     </div>
     <div class="toolbar">
       <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-        <input id="searchInput" placeholder="Produkt oder Kategorie suchen…" value="${esc(search)}"></div>
+        <input id="searchInput" placeholder="Produkt, Marke oder Kategorie suchen…" value="${esc(search)}"></div>
       <select class="selstyle" id="katFilter">
         <option value="">Alle Kategorien</option>
         ${kats.map(k=>`<option value="${esc(k)}" ${filter.kat===k?'selected':''}>${esc(k)}</option>`).join('')}
       </select>
+      <div class="viewtog" role="group" aria-label="Ansicht">
+        <button class="vbtn ${viewMode==='grid'?'on':''}" id="vGrid" title="Kacheln" onclick="setViewMode('grid')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></button>
+        <button class="vbtn ${viewMode==='list'?'on':''}" id="vList" title="Liste" onclick="setViewMode('list')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></button>
+      </div>
     </div>
-    <div class="chips" style="margin-bottom:18px">
-      <button class="chip ${filter.automat?'on':''}" onclick="toggleFilter('automat')">Nur im Automat</button>
-      <button class="chip ${filter.abweichung?'on':''}" onclick="toggleFilter('abweichung')">Nur Abweichung</button>
+    <div class="toolbar" style="margin-top:-6px">
+      <div class="sortwrap">
+        <span class="sortlbl">Sortieren</span>
+        <select class="selstyle" id="sort1">${sortOpts(sort1)}</select>
+        <button class="vbtn" id="sortDir" title="Richtung" onclick="toggleSortDir()">${sort1dir==='asc'?'↑':'↓'}</button>
+        <span class="sortlbl">dann</span>
+        <select class="selstyle" id="sort2"><option value="">—</option>${sortOpts(sort2)}</select>
+      </div>
+      <div class="chips">
+        <button class="chip ${filter.automat?'on':''}" onclick="toggleFilter('automat')">Nur im Automat</button>
+        <button class="chip ${filter.abweichung?'on':''}" onclick="toggleFilter('abweichung')">Nur Abweichung</button>
+      </div>
     </div>
-    ${list.length ? `<div class="grid">${list.map(cardHtml).join('')}</div>`
-      : `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg><div>${products.length? 'Keine Treffer.' : 'Noch keine Produkte. Lege eins an oder importiere deine JSON unter „Import / Export".'}</div></div>`}
+    <div id="prodList">${renderItems(list)}</div>
   `;
   const si = $('searchInput');
-  si.oninput = e=>{ search=e.target.value; const c=si.selectionStart; renderProdukteList(); };
+  si.oninput = ()=>{ search=si.value; lightRenderProducts(); };
   $('katFilter').onchange = e=>{ filter.kat=e.target.value; render(); };
+  $('sort1').onchange = e=>{ sort1=e.target.value; saveViewPrefs(); lightRenderProducts(); };
+  $('sort2').onchange = e=>{ sort2=e.target.value; saveViewPrefs(); lightRenderProducts(); };
 }
-function renderProdukteList(){ // leichter re-render nur der Liste (Fokus behalten)
-  const kats=null;
-  let list = products.filter(p=>{
-    const s=search.toLowerCase();
-    if(s && !(String(p.name||'').toLowerCase().includes(s)||String(p.kategorie||'').toLowerCase().includes(s)))return false;
-    if(filter.automat && !p.im_automat)return false;
-    if(filter.kat && p.kategorie!==filter.kat)return false;
-    if(filter.abweichung && !rechnePreis(p).abweichung)return false;
-    return true;
-  }).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'de'));
-  const grid=document.querySelector('.grid');
-  if(grid) grid.innerHTML = list.map(cardHtml).join('');
+function renderItems(list){
+  if(!list.length){
+    return `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg><div>${products.length? 'Keine Treffer.' : 'Noch keine Produkte. Lege eins an oder importiere deine JSON unter „Import / Export".'}</div></div>`;
+  }
+  return viewMode==='list'
+    ? `<div class="plist">${list.map(rowHtml).join('')}</div>`
+    : `<div class="grid">${list.map(cardHtml).join('')}</div>`;
 }
+function lightRenderProducts(){ const c=$('prodList'); if(c) c.innerHTML = renderItems(getVisibleProducts()); }
+function setViewMode(m){ if(viewMode===m) return; viewMode=m; saveViewPrefs(); $('vGrid')&&$('vGrid').classList.toggle('on',m==='grid'); $('vList')&&$('vList').classList.toggle('on',m==='list'); lightRenderProducts(); }
+function toggleSortDir(){ sort1dir = sort1dir==='asc'?'desc':'asc'; saveViewPrefs(); const b=$('sortDir'); if(b)b.textContent=sort1dir==='asc'?'↑':'↓'; lightRenderProducts(); }
 function cardHtml(p){
   const c = rechnePreis(p);
   const t = mhdTage(p.mhd);
@@ -551,6 +656,19 @@ function cardHtml(p){
     <div class="card-meta">${mhdHtml}<span>EK ${eur(c.ekBrutto)} €</span></div>
   </div>`;
 }
+function rowHtml(p){
+  const c = rechnePreis(p);
+  const t = mhdTage(p.mhd);
+  return `<div class="prow" onclick="openProduct('${p.id}')">
+    <div class="dot ${p.im_automat?'dot-on':'dot-off'}" title="${p.im_automat?'im Automat':'nicht im Automat'}"></div>
+    <div class="prow-main">
+      <div class="prow-name">${esc(p.name||'(ohne Name)')}</div>
+      <div class="prow-sub">${esc(p.kategorie||'—')}${p.mhd?` · <span class="${t!=null&&t<14?'mhd-soon':''}">MHD ${new Date(p.mhd).toLocaleDateString('de-DE')}</span>`:''}</div>
+    </div>
+    <div class="prow-db">DB ${eur(c.deckungsbeitrag)} €</div>
+    <div class="prow-price">${c.abweichung?`<span class="tag tag-warn" style="margin-right:7px">⚠</span>`:''}${eur(c.verkauf)} €</div>
+  </div>`;
+}
 function toggleFilter(k){ filter[k]=!filter[k]; render(); }
 
 /* ---------- Produkt-Modal ---------- */
@@ -567,7 +685,9 @@ function openProduct(id, prefill){
     <div class="modal-body">
       <div class="fieldset"><div class="fgrid">
         <div class="field full"><label>Produktname</label><input id="f_name" value="${esc(g('name'))}" placeholder="z.B. Coca Cola"></div>
-        <div class="field"><label>Kategorie</label><input id="f_kat" list="katlist" value="${esc(g('kategorie'))}" placeholder="z.B. Softdrink"><datalist id="katlist">${kats.map(k=>`<option value="${esc(k)}">`).join('')}</datalist></div>
+        <div class="field"><label>Kategorie</label><input id="f_kat" value="${esc(g('kategorie'))}" placeholder="z.B. Softdrink" autocomplete="off">
+          ${kats.length?`<div class="katchips">${kats.map(k=>`<button type="button" class="katchip" onclick="$('f_kat').value='${esc(k).replace(/'/g,"\\'")}'">${esc(k)}</button>`).join('')}</div>`:''}
+        </div>
         <div class="field"><label>EAN / Barcode</label><input id="f_ean" value="${esc(g('ean'))}" placeholder="optional"></div>
       </div></div>
 
@@ -630,6 +750,7 @@ function liveCalc(){
 function saveProduct(id){
   const data = readForm();
   if(!data.name){ toast('Bitte einen Namen eingeben'); return; }
+  data._updated = new Date().toISOString();   // für „zuletzt geändert"-Sortierung
   let saved;
   if(id){ const i=products.findIndex(x=>x.id===id); saved = products[i] = {...products[i], ...data}; }
   else  { saved = {id:uid(), ...data}; products.push(saved); }
@@ -671,6 +792,7 @@ function openScanner(){
       </div>
     </div>`;
   showModal();
+  scanHandled = false;
   startCam();
 }
 function setScanStatus(t){ const el=$('scanStatus'); if(el) el.textContent=t; }
@@ -717,7 +839,8 @@ async function startCam(){
 
   html5qr.start(
     cam, config,
-    code => { try{ navigator.vibrate && navigator.vibrate(60); }catch(_){}
+    code => { if(scanHandled) return; scanHandled=true;       // nur einmal auslösen
+              try{ navigator.vibrate && navigator.vibrate(60); }catch(_){}
               stopCam(); setScanStatus('Gescannt: '+code); lookupEan(code); },
     () => {} // Frame-Fehler ignorieren
   )
