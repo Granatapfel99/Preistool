@@ -195,6 +195,21 @@ tbody tr:hover{background:var(--panel2)}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast svg{width:17px;height:17px;color:var(--acc)}
 
+/* ---------- Login ---------- */
+.login-overlay{position:fixed;inset:0;background:var(--bg);z-index:300;display:none;align-items:center;justify-content:center;padding:24px;
+  background-image:radial-gradient(circle at 18% -10%,rgba(74,222,94,.07),transparent 45%),radial-gradient(circle at 100% 0%,rgba(91,157,255,.05),transparent 40%);}
+.login-card{background:var(--panel);border:1px solid var(--line2);border-radius:18px;width:100%;max-width:380px;padding:28px 26px;box-shadow:0 24px 70px rgba(0,0,0,.5)}
+.login-card .lg-brand{display:flex;align-items:center;gap:11px}
+.login-card .lg-brand .brand-logo{width:34px;height:34px}
+.login-card .lg-brand b{font-family:var(--disp);font-weight:800;font-size:19px;letter-spacing:-.5px}
+.login-card h2{font-family:var(--disp);font-size:18px;margin:16px 0 4px}
+.login-card p{color:var(--txt2);font-size:13px;margin:0 0 18px}
+.login-card label{font-size:12.5px;color:var(--txt2);font-weight:500;display:block;margin-bottom:5px}
+.login-card input{width:100%;padding:11px 13px;background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius-sm);color:var(--txt);outline:none;margin-bottom:13px;transition:.12s}
+.login-card input:focus{border-color:var(--acc-dim);box-shadow:0 0 0 3px rgba(74,222,94,.1)}
+.login-card .lg-err{color:var(--warn);font-size:12.5px;min-height:17px;margin-bottom:8px}
+.login-card .btn{width:100%;justify-content:center}
+
 /* ---------- Mobile ---------- */
 .botnav{display:none}
 @media(max-width:860px){
@@ -268,6 +283,24 @@ tbody tr:hover{background:var(--panel2)}
 <!-- Modal root -->
 <div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
 <div class="toast" id="toast"></div>
+
+<!-- Login (nur im Cloud-Modus sichtbar) -->
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-card">
+    <div class="lg-brand">
+      <svg class="brand-logo" viewBox="0 0 40 40" fill="none"><rect x="3" y="2" width="34" height="36" rx="4" fill="#1a1e1a" stroke="#4ade5e" stroke-width="2"/><rect x="8" y="7" width="14" height="20" rx="1.5" fill="#0d0f0d" stroke="#3a423a"/><rect x="10" y="9" width="3.5" height="3.5" fill="#4ade5e"/><rect x="16" y="9" width="3.5" height="3.5" fill="#5b9dff"/><rect x="10" y="14" width="3.5" height="3.5" fill="#ff7a5c"/><rect x="16" y="14" width="3.5" height="3.5" fill="#4ade5e"/><rect x="26" y="7" width="6" height="13" rx="1" fill="#0d0f0d" stroke="#3a423a"/></svg>
+      <b>The IN</b>
+    </div>
+    <h2>Anmelden</h2>
+    <p>Bitte mit deinem Konto einloggen.</p>
+    <label>E-Mail</label>
+    <input id="login_email" type="email" autocomplete="username" placeholder="name@mail.de">
+    <label>Passwort</label>
+    <input id="login_pass" type="password" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+    <div class="lg-err" id="login_err"></div>
+    <button class="btn btn-acc" id="login_btn" onclick="doLogin()">Anmelden</button>
+  </div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -1010,6 +1043,9 @@ function renderEinstellungen(){
       </div>
       <h3 style="margin-top:22px">Darstellung</h3>
       <div class="field full"><div class="inline-toggle"><label class="switch"><input type="checkbox" id="s_dark" ${settings.theme==='dark'?'checked':''} onchange="toggleTheme()"><span class="slider"></span></label><span>Dark Mode</span></div></div>
+      ${USE_CLOUD?`<h3 style="margin-top:22px">Konto</h3>
+      <p class="d" style="margin-bottom:10px">Angemeldet als <b>${esc(currentUserEmail||'—')}</b></p>
+      <button class="btn btn-ghost" style="width:100%;justify-content:center" onclick="doLogout()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Abmelden</button>`:''}
       <button class="btn btn-acc" style="margin-top:20px;width:100%;justify-content:center" onclick="saveSettings()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6 9 17l-5-5"/></svg>Einstellungen speichern</button>
       <button class="btn btn-danger" style="margin-top:10px;width:100%;justify-content:center" onclick="wipe()">Alle lokalen Daten löschen</button>
     </div>`;
@@ -1069,22 +1105,60 @@ function subscribeRealtime(){
     });
 }
 
+/* =====================================================================
+   AUTH  (Login — nur im Cloud-Modus)
+   ===================================================================== */
+let currentUserEmail = '';
+function showLogin(){ const o=$('loginOverlay'); if(o) o.style.display='flex'; }
+function hideLogin(){ const o=$('loginOverlay'); if(o) o.style.display='none'; const p=$('login_pass'); if(p) p.value=''; }
+async function doLogin(){
+  const email=($('login_email').value||'').trim();
+  const pass =$('login_pass').value||'';
+  const err=$('login_err'); err.textContent='';
+  if(!email || !pass){ err.textContent='Bitte E-Mail und Passwort eingeben.'; return; }
+  const btn=$('login_btn'); const old=btn.textContent; btn.disabled=true; btn.textContent='Anmelden…';
+  const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+  btn.disabled=false; btn.textContent=old;
+  if(error){ err.textContent = /invalid login/i.test(error.message||'') ? 'E-Mail oder Passwort falsch.' : ('Anmeldung fehlgeschlagen: '+error.message); }
+  // Erfolg -> onAuthStateChange übernimmt (hideLogin + startCloud)
+}
+async function doLogout(){ if(USE_CLOUD){ try{ await sb.auth.signOut(); }catch(e){} } }
+
+/* =====================================================================
+   LADEN / LIVE-SYNC starten & stoppen
+   ===================================================================== */
+async function startCloud(){
+  setSync('connecting');
+  try{
+    products = await loadProducts();
+    waste    = await loadWaste();
+    settings = await loadSettings();
+    applyTheme(); render(); setSync('live');
+    subscribeRealtime();
+  }catch(e){ setSync('offline'); toast('Cloud nicht erreichbar — lokaler Stand'); }
+}
+function teardownCloud(){
+  if(rtChannel){ try{ sb.removeChannel(rtChannel); }catch(e){} rtChannel=null; }
+  products=[]; waste=[]; render(); setSync('connecting');   // Daten beim Abmelden aus dem Speicher räumen
+}
+
 async function init(){
   // 1) Sofort aus lokalem Cache rendern (schneller Start, funktioniert offline).
   products = localGet('thein_products');
   waste    = localGet('thein_waste');
   settings = {...DEFAULTS, ...localSettingsObj(), theme:localTheme()};
   applyTheme(); render();
-  // 2) Falls Cloud konfiguriert: frische Daten laden + Live-Sync starten.
+  // 2) Cloud-Modus: Login erzwingen, danach live laden.
   if(USE_CLOUD){
     setSync('connecting');
-    try{
-      products = await loadProducts();
-      waste    = await loadWaste();
-      settings = await loadSettings();
-      applyTheme(); render(); setSync('live');
-      subscribeRealtime();
-    }catch(e){ setSync('offline'); toast('Cloud nicht erreichbar — lokaler Stand'); }
+    sb.auth.onAuthStateChange((event, sess)=>{
+      if(!sess || event==='SIGNED_OUT'){ currentUserEmail=''; teardownCloud(); showLogin(); return; }
+      if(event==='SIGNED_IN' || event==='INITIAL_SESSION'){
+        currentUserEmail = (sess.user && sess.user.email) || '';
+        hideLogin(); startCloud();
+      }
+      // TOKEN_REFRESHED u.a.: läuft einfach weiter
+    });
   }
 }
 init();
