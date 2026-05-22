@@ -176,6 +176,25 @@ input,select,textarea{font-family:inherit;font-size:15px}
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--acc-dim);box-shadow:0 0 0 3px rgba(74,222,94,.1)}
 .field .hint{font-size:11px;color:var(--txt3)}
 .field .req{font-size:11px;color:var(--warn);font-weight:600}
+.geb-hint{font-size:13px;color:var(--txt2);font-family:var(--mono);background:rgba(74,222,94,.08);border:1px solid var(--acc-dim);border-radius:var(--radius-sm);padding:9px 12px}
+.geb-hint b{color:var(--acc)}
+/* Ablauf-Überwachung */
+.explist{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.exprow{display:flex;align-items:center;gap:12px;padding:11px 13px;background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius-sm)}
+.exprow-main{flex:1;min-width:0}
+.exprow-name{font-weight:600;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.exprow-sub{font-size:12px;color:var(--txt3);margin-top:2px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.exprow-acts{display:flex;gap:6px;flex-shrink:0}
+.mhdb{font-size:11px;font-weight:600;padding:2px 8px;border-radius:99px;white-space:nowrap}
+.mhdb-exp{background:var(--warn-bg);color:var(--warn)}
+.mhdb-soon{background:rgba(255,170,60,.15);color:#ffb44d}
+.mhdb-act{background:rgba(91,157,255,.13);color:var(--blue)}
+.mhdb-priv{background:rgba(74,222,94,.12);color:var(--ok)}
+@media(max-width:860px){
+  .exprow{flex-wrap:wrap}
+  .exprow-acts{width:100%}
+  .exprow-acts .btn{flex:1;justify-content:center}
+}
 .katchips{display:flex;flex-wrap:wrap;gap:6px}
 .katcombo{display:flex;gap:7px}
 .katcombo input{flex:1;min-width:0}
@@ -183,7 +202,7 @@ input,select,textarea{font-family:inherit;font-size:15px}
 .katcaret svg{width:18px;height:18px;transition:transform .15s}
 .katcaret:hover{border-color:var(--acc-dim);color:var(--acc)}
 .katcombo.open .katcaret svg{transform:rotate(180deg)}
-.katpanel{display:none;margin-top:8px;max-height:210px;overflow-y:auto;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--bg2);padding:11px}
+.katpanel{display:none;margin-top:8px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--bg2);padding:11px}
 .katpanel.open{display:block}
 .katchip{padding:5px 11px;background:var(--panel2);border:1px solid var(--line);border-radius:99px;font-size:12.5px;color:var(--txt2);transition:.1s}
 .katchip:hover{border-color:var(--acc-dim);color:var(--acc)}
@@ -362,6 +381,7 @@ const DEFAULTS = {
   default_marge: 100,     // Soll-Marge in %
   default_mwst: 7,        // % (7 oder 19) — pro Produkt überschreibbar
   rundung: 0.10,          // Endpreis auf X € runden
+  mhd_warn_tage: 7,       // ab wie vielen Resttagen ein Produkt als „bald ablaufend" gilt
   theme: "dark"
 };
 
@@ -565,6 +585,17 @@ function rechnePreis(p){
 
 /* ---------- MHD-Helfer ---------- */
 function mhdTage(mhd){ if(!mhd) return null; const d=new Date(mhd); if(isNaN(d))return null; return Math.ceil((d - new Date())/86400000); }
+/* MHD-Status für Ampel/Logik. warnDays aus Settings (Default 7). */
+function warnDays(){ const n=num(settings.mhd_warn_tage); return n>0?n:7; }
+function mhdStatus(p){
+  const t=mhdTage(p.mhd);
+  if(t==null) return {key:'none', t:null};
+  if(t<0)  return {key:'expired', t};
+  if(t===0)return {key:'today', t};
+  if(t<=warnDays()) return {key:'soon', t};
+  return {key:'ok', t};
+}
+function fmtDate(d){ const x=new Date(d); return isNaN(x)?'':x.toLocaleDateString('de-DE'); }
 
 /* =====================================================================
    NAVIGATION
@@ -717,8 +748,15 @@ function openProduct(id, prefill){
         <div class="field"><label>EAN / Barcode</label><input id="f_ean" value="${esc(g('ean'))}" placeholder="optional"></div>
       </div></div>
 
-      <fieldset class="fieldset" style="border:none;padding:0;margin:0 0 20px"><legend>Einkauf</legend><div class="fgrid">
-        <div class="field"><label>Rohpreis (€)</label><input id="f_roh" type="text" inputmode="decimal" value="${g('rohpreis','')}" oninput="liveCalc()"></div>
+      <fieldset class="fieldset" style="border:none;padding:0;margin:0 0 20px"><legend>Einkauf</legend>
+        <div class="inline-toggle" style="margin-bottom:12px"><label class="switch"><input type="checkbox" id="f_geb" ${p.gebinde_aktiv?'checked':''} onchange="toggleGebinde()"><span class="slider"></span></label><span>Gebinde / Karton umrechnen <span class="hint">(Preis pro Stück automatisch)</span></span></div>
+        <div class="fgrid" id="gebBox" style="display:${p.gebinde_aktiv?'grid':'none'};margin-bottom:12px">
+          <div class="field"><label>Gebindepreis (€) <span class="hint">ganzer Karton</span></label><input id="f_gebpreis" type="text" inputmode="decimal" value="${g('gebinde_preis','')}" oninput="liveCalc()"></div>
+          <div class="field"><label>Stück im Gebinde</label><input id="f_gebstk" type="text" inputmode="numeric" value="${g('gebinde_stueck','')}" oninput="liveCalc()"></div>
+          <div class="field full"><div class="geb-hint" id="gebHint">Preis pro Stück wird berechnet…</div></div>
+        </div>
+        <div class="fgrid">
+        <div class="field"><label>Rohpreis (€) <span class="hint" id="rohHint">pro Stück</span></label><input id="f_roh" type="text" inputmode="decimal" value="${g('rohpreis','')}" oninput="liveCalc()"></div>
         <div class="field"><label>Roh ist…</label><select id="f_nb" onchange="liveCalc()"><option value="brutto" ${g('netto_brutto','brutto')==='brutto'?'selected':''}>brutto</option><option value="netto" ${g('netto_brutto')==='netto'?'selected':''}>netto</option></select></div>
         <div class="field"><label>MwSt. Einkauf</label><select id="f_mwstek" onchange="liveCalc()"><option value="7" ${num(g('mwst_ek',settings.default_mwst))==7?'selected':''}>7 %</option><option value="19" ${num(g('mwst_ek',settings.default_mwst))==19?'selected':''}>19 %</option></select></div>
         <div class="field"><label>Soll-Marge (%)</label><input id="f_marge" type="text" inputmode="decimal" value="${g('marge_soll',settings.default_marge)}" oninput="liveCalc()"></div>
@@ -746,6 +784,7 @@ function openProduct(id, prefill){
       </div>
     </div>`;
   showModal();
+  if($('f_geb') && $('f_geb').checked){ const rf=$('f_roh'); if(rf){ rf.readOnly=true; rf.style.opacity='.6'; } const rh=$('rohHint'); if(rh) rh.textContent='wird aus Gebinde berechnet'; }
   liveCalc();
 }
 function readForm(){
@@ -756,10 +795,35 @@ function readForm(){
     preisschild:$('f_schild').value.trim()===''?'':num($('f_schild').value),
     aktionspreis:$('f_aktion').value.trim()===''?'':num($('f_aktion').value),
     bestand:num($('f_bestand').value), mhd:$('f_mhd').value, beliebtheit:$('f_bel').value,
-    im_automat:$('f_automat').checked
+    im_automat:$('f_automat').checked,
+    gebinde_aktiv:$('f_geb')?$('f_geb').checked:false,
+    gebinde_preis:$('f_gebpreis')&&$('f_gebpreis').value.trim()!==''?num($('f_gebpreis').value):'',
+    gebinde_stueck:$('f_gebstk')&&$('f_gebstk').value.trim()!==''?num($('f_gebstk').value):''
   };
 }
+function toggleGebinde(){
+  const on=$('f_geb').checked;
+  $('gebBox').style.display = on?'grid':'none';
+  const rh=$('rohHint'); if(rh) rh.textContent = on?'wird aus Gebinde berechnet':'pro Stück';
+  const rf=$('f_roh'); if(rf){ rf.readOnly=on; rf.style.opacity=on?'.6':'1'; }
+  liveCalc();
+}
+/* Gebinde -> Rohpreis pro Stück. Gibt {ok, perUnit} zurück. */
+function applyGebinde(){
+  if(!$('f_geb')||!$('f_geb').checked) return {ok:false};
+  const total=num($('f_gebpreis').value), stk=num($('f_gebstk').value);
+  const hint=$('gebHint');
+  if(total>0 && stk>0){
+    const per=total/stk;
+    if($('f_roh')) $('f_roh').value = (Math.round(per*10000)/10000).toString().replace('.',',');
+    if(hint) hint.innerHTML = `<b>${eur(per)} €</b> pro Stück &nbsp;·&nbsp; ${eur(total)} € ÷ ${stk} Stück`;
+    return {ok:true, perUnit:per};
+  }
+  if(hint) hint.textContent='Gebindepreis und Stückzahl eingeben…';
+  return {ok:false};
+}
 function liveCalc(){
+  applyGebinde();                       // ggf. Rohpreis/Stück aktualisieren (vor readForm)
   const p = readForm();
   const c = rechnePreis(p);
   $('calcBox').innerHTML = `<div class="calc-grid">
@@ -957,18 +1021,52 @@ async function lookupEan(ean){
 function renderVerderb(){
   const rows = [...waste].sort((a,b)=>String(a.warenbezeichnung||'').localeCompare(String(b.warenbezeichnung||''),'de'));
   const sumBrutto = rows.reduce((s,w)=>s+num(w.ek_brutto)*num(w.menge||1),0);
+
+  // Ablauf-Kandidaten aus den Produkten (abgelaufen + bald ablaufend), dringlichste zuerst.
+  const kandidaten = products.map(p=>({p, st:mhdStatus(p)}))
+    .filter(x=>x.st.key==='expired'||x.st.key==='today'||x.st.key==='soon')
+    .sort((a,b)=>(a.st.t??0)-(b.st.t??0));
+
   $('content').innerHTML = `
     <div class="page-head">
-      <div><h1>Warenverderb</h1><div class="sub">${rows.length} Positionen · Verderb-Wert (EK brutto) ${eur(sumBrutto)} €</div></div>
+      <div><h1>Warenverderb</h1><div class="sub">${rows.length} gebuchte Positionen · Verderb-Wert (EK brutto) ${eur(sumBrutto)} €</div></div>
       <div style="display:flex;gap:9px">
         <button class="btn btn-ghost" onclick="exportVerderbCsv()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>CSV</button>
         <button class="btn btn-acc" onclick="openVerderb(null)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>Position</button>
       </div>
     </div>
+
+    ${kandidaten.length?`
+    <div class="setcard" style="max-width:none;margin-bottom:18px;border-color:var(--warn)">
+      <h3 style="display:flex;align-items:center;gap:8px">⚠ Ablauf-Überwachung <span style="font-size:12px;color:var(--txt3);font-weight:400">${kandidaten.length} Artikel betroffen · Vorwarnung ${warnDays()} Tage</span></h3>
+      <p class="d">Du entscheidest pro Artikel. Aktionsware bleibt in „Produkte" und zählt <b>nicht</b> als Verderb. Erst „Als Verderb buchen" oder „Private Entnahme" erfasst hier eine Position.</p>
+      <div class="explist">
+        ${kandidaten.map(({p,st})=>{
+          const c=rechnePreis(p);
+          const badge = st.key==='expired'?`<span class="mhdb mhdb-exp">abgelaufen ${Math.abs(st.t)} T.</span>`
+                      : st.key==='today'?`<span class="mhdb mhdb-exp">läuft heute ab</span>`
+                      : `<span class="mhdb mhdb-soon">in ${st.t} T.</span>`;
+          const aktionHint = (p.aktionspreis!=null&&p.aktionspreis!=='')?`<span class="mhdb mhdb-act">Aktion ${eur(p.aktionspreis)} €</span>`:'';
+          return `<div class="exprow">
+            <div class="exprow-main">
+              <div class="exprow-name">${esc(p.name||'(ohne Name)')}</div>
+              <div class="exprow-sub">MHD ${fmtDate(p.mhd)} ${badge} ${aktionHint} · Bestand ${esc(String(p.bestand??''))} · EK ${eur(c.ekBrutto)} €</div>
+            </div>
+            <div class="exprow-acts">
+              <button class="btn btn-ghost btn-sm" onclick="aktionFor('${p.id}')" title="Aktionspreis setzen — bleibt in Produkten">Aktion</button>
+              <button class="btn btn-ghost btn-sm" onclick="privatFor('${p.id}')" title="Als private Entnahme buchen">Privat</button>
+              <button class="btn btn-danger btn-sm" onclick="verderbFor('${p.id}')" title="Als Warenverderb buchen">Verderb</button>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`:''}
+
     <div style="font-family:var(--mono);font-size:12.5px;color:var(--txt2);margin-bottom:14px">${esc(settings.inhaber_name)} · ${esc(settings.inhaber_email)} · ${new Date().getFullYear()} – Warenverderb</div>
     ${rows.length?`<div class="tablewrap"><table>
-      <thead><tr><th>Warenbezeichnung</th><th>Menge</th><th>Einzelpreis</th><th>MwSt</th><th>MHD</th><th>EK Brutto</th><th>EK Netto</th><th>priv. Entnahme</th><th>Kommentar</th><th></th></tr></thead>
+      <thead><tr><th>Art</th><th>Warenbezeichnung</th><th>Menge</th><th>Einzelpreis</th><th>MwSt</th><th>MHD</th><th>EK Brutto</th><th>EK Netto</th><th>priv. Entnahme</th><th>Kommentar</th><th></th></tr></thead>
       <tbody>${rows.map(w=>`<tr onclick="openVerderb('${w.id}')" style="cursor:pointer">
+        <td>${w.typ==='privat'?'<span class="mhdb mhdb-priv">Privat</span>':'<span class="mhdb mhdb-exp">Verderb</span>'}</td>
         <td>${esc(w.warenbezeichnung)}</td>
         <td class="num">${esc(w.menge||'')}</td>
         <td class="num">${w.einzelpreis!=null&&w.einzelpreis!==''?eur(w.einzelpreis)+' €':'—'}</td>
@@ -980,18 +1078,55 @@ function renderVerderb(){
         <td>${esc(w.kommentar||'')}</td>
         <td class="tdel num" onclick="event.stopPropagation();delVerderb('${w.id}')">✕</td>
       </tr>`).join('')}</tbody></table></div>`
-      :`<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg><div>Noch keine Verderb-Positionen erfasst.</div></div>`}
+      :`<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg><div>Noch keine Verderb-Positionen gebucht.</div></div>`}
   `;
+}
+/* --- Aktionen aus der Ablauf-Überwachung (Produkt -> Entscheidung) --- */
+function aktionFor(pid){
+  const p=products.find(x=>x.id===pid); if(!p) return;
+  const c=rechnePreis(p);
+  const vorschlag = Math.max(0, Math.round((c.gerundet*0.7)/(num(settings.rundung)||0.10))*(num(settings.rundung)||0.10)); // ~30% runter, gerundet
+  const cur = (p.aktionspreis!=null&&p.aktionspreis!=='')?eur(p.aktionspreis):eur(vorschlag);
+  const inp = prompt(`Aktionspreis für „${p.name}" (€):\nProdukt bleibt in „Produkte" und zählt NICHT als Verderb.`, cur.replace('.',','));
+  if(inp==null) return;
+  p.aktionspreis = num(inp); p._updated=new Date().toISOString();
+  persist(); if(USE_CLOUD){ cloudUpsert('products', p).catch(()=>{}); }
+  render(); toast('Aktionspreis gesetzt');
+}
+function privatFor(pid){
+  const p=products.find(x=>x.id===pid); if(!p) return;
+  const menge = prompt(`Private Entnahme — „${p.name}"\nWie viele Stück entnommen?`, '1');
+  if(menge==null) return;
+  bookWaste(p, 'privat', { private_entnahme:String(num(menge)||menge||'').trim(), menge:String(num(menge)||1) });
+  toast('Private Entnahme gebucht');
+}
+function verderbFor(pid){
+  const p=products.find(x=>x.id===pid); if(!p) return;
+  if(!confirm(`„${p.name}" als Warenverderb buchen?\nWird in den Verderb-Export aufgenommen.`)) return;
+  bookWaste(p, 'verderb', { menge:String(num(p.bestand)>0&&num(p.bestand)<9999?num(p.bestand):1) });
+  toast('Als Verderb gebucht');
+}
+/* Erzeugt eine Verderb-/Privat-Position aus einem Produkt (Daten vorbefüllt). */
+function bookWaste(p, typ, extra){
+  const c=rechnePreis(p);
+  const saved = { id:uid(), typ,
+    warenbezeichnung:p.name||'', menge:'1',
+    einzelpreis: c.verkauf!=null?r2(c.verkauf):'', mwst:String(num(p.mwst_ek||settings.default_mwst)),
+    mhd:fmtDate(p.mhd), ek_brutto:r2(c.ekBrutto), ek_netto:r4(c.ekNetto),
+    private_entnahme:'', kommentar:'', _updated:new Date().toISOString(), ...extra };
+  waste.push(saved); persist();
+  if(USE_CLOUD){ cloudUpsert('waste', saved).catch(()=>{}); }
+  render();
 }
 function openVerderb(id){
   const w = id ? waste.find(x=>x.id===id) : {};
   const isNew=!id; const g=(k,d='')=>w[k]!=null?w[k]:d;
-  const prodList = products.map(p=>esc(p.name)).filter(Boolean);
   $('modal').innerHTML = `
     <div class="modal-head"><h2>${isNew?'Verderb erfassen':'Position bearbeiten'}</h2>
       <button class="x" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     <div class="modal-body"><div class="fgrid">
-      <div class="field full"><label>Warenbezeichnung</label><input id="w_name" list="prodlist" value="${esc(g('warenbezeichnung'))}"><datalist id="prodlist">${prodList.map(n=>`<option value="${n}">`).join('')}</datalist></div>
+      <div class="field full"><label>Art der Position</label><select id="w_typ"><option value="verderb" ${g('typ','verderb')==='verderb'?'selected':''}>Warenverderb</option><option value="privat" ${g('typ')==='privat'?'selected':''}>Private Entnahme</option></select></div>
+      <div class="field full"><label>Warenbezeichnung</label><input id="w_name" value="${esc(g('warenbezeichnung'))}" autocomplete="off" placeholder="Produktname"></div>
       <div class="field"><label>Menge</label><input id="w_menge" inputmode="numeric" value="${g('menge','1')}"></div>
       <div class="field"><label>Einzelpreis (€)</label><input id="w_einzel" inputmode="decimal" value="${g('einzelpreis','')}"></div>
       <div class="field"><label>MwSt. (%)</label><select id="w_mwst"><option value="7" ${num(g('mwst',7))==7?'selected':''}>7 %</option><option value="19" ${num(g('mwst'))==19?'selected':''}>19 %</option></select></div>
@@ -1008,7 +1143,7 @@ function openVerderb(id){
   showModal();
 }
 function saveVerderb(id){
-  const d={ warenbezeichnung:$('w_name').value.trim(), menge:$('w_menge').value.trim(),
+  const d={ typ:$('w_typ')?$('w_typ').value:'verderb', warenbezeichnung:$('w_name').value.trim(), menge:$('w_menge').value.trim(),
     einzelpreis:$('w_einzel').value.trim()===''?'':num($('w_einzel').value), mwst:$('w_mwst').value,
     mhd:$('w_mhd').value.trim(), ek_brutto:$('w_ekb').value.trim()===''?'':num($('w_ekb').value),
     ek_netto:$('w_ekn').value.trim()===''?'':num($('w_ekn').value), private_entnahme:$('w_priv').value.trim(),
@@ -1196,6 +1331,7 @@ function renderEinstellungen(){
         <div class="field"><label>Standard Soll-Marge (%)</label><input id="s_marge" inputmode="decimal" value="${settings.default_marge}"></div>
         <div class="field"><label>Standard MwSt. (%)</label><select id="s_mwst"><option value="7" ${settings.default_mwst==7?'selected':''}>7 %</option><option value="19" ${settings.default_mwst==19?'selected':''}>19 %</option></select></div>
         <div class="field"><label>Endpreis runden auf (€)</label><select id="s_rund"><option value="0.05" ${settings.rundung==0.05?'selected':''}>0,05 €</option><option value="0.10" ${settings.rundung==0.10?'selected':''}>0,10 €</option><option value="0.50" ${settings.rundung==0.50?'selected':''}>0,50 €</option></select></div>
+        <div class="field"><label>MHD-Vorwarnung (Tage)</label><input id="s_warn" inputmode="numeric" value="${num(settings.mhd_warn_tage)||7}"></div>
       </div>
       <h3 style="margin-top:22px">Inhaber (für Warenverderb-Export)</h3>
       <div class="fgrid">
@@ -1215,6 +1351,7 @@ function saveSettings(){
   settings.default_marge=num($('s_marge').value);
   settings.default_mwst=num($('s_mwst').value);
   settings.rundung=num($('s_rund').value);
+  if($('s_warn')) settings.mhd_warn_tage=num($('s_warn').value)||7;
   settings.inhaber_name=$('s_name').value.trim();
   settings.inhaber_email=$('s_mail').value.trim();
   setLocalTheme(settings.theme); localSet('thein_settings', settings);
