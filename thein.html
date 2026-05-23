@@ -230,6 +230,27 @@ input,select,textarea{font-family:inherit;font-size:15px}
 .calc-hero .lbl{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--txt2);font-family:var(--mono)}
 .calc-hero .val{font-family:var(--mono);font-weight:600;font-size:30px;letter-spacing:-1px;color:var(--acc)}
 .pos{color:var(--ok)}.neg{color:var(--warn)}
+.kpi-help{margin:-8px 0 20px;font-size:13px}
+.kpi-help summary{cursor:pointer;color:var(--txt2);font-family:var(--mono);font-size:12px;padding:6px 0;list-style:none;user-select:none}
+.kpi-help summary::-webkit-details-marker{display:none}
+.kpi-help summary:before{content:"▸ ";color:var(--acc)}
+.kpi-help[open] summary:before{content:"▾ "}
+.kpi-help summary:hover{color:var(--txt)}
+.kpi-help-body{padding:6px 2px 2px;color:var(--txt2);line-height:1.5}
+.kpi-help-body p{margin:0 0 7px}
+.kpi-help-body b{color:var(--txt)}
+.qa-info{font-size:12.5px;color:var(--txt2);font-family:var(--mono);background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:9px 12px;margin-bottom:14px}
+.vend-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+.vend-stat{background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:12px 8px;text-align:center}
+.vend-stat b{display:block;font-family:var(--mono);font-size:22px;font-weight:600}
+.vend-stat span{font-size:11px;color:var(--txt3)}
+.vend-stat.warn b{color:var(--warn)} .vend-stat.blue b{color:var(--blue)}
+.vend-list{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:var(--radius-sm);overflow-y:auto;max-height:240px}
+.vend-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--line)}
+.vend-row:last-child{border-bottom:none}
+.vend-name{flex:1;min-width:0;font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vend-sub{display:block;font-size:11px;color:var(--txt3);font-weight:400}
+.vend-cmp{font-family:var(--mono);font-size:12px;color:var(--txt2);white-space:nowrap}
 
 /* ---------- Table (Warenverderb) ---------- */
 .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel)}
@@ -373,6 +394,7 @@ tbody tr:hover{background:var(--panel2)}
 
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 "use strict";
 /* =====================================================================
@@ -734,7 +756,6 @@ function cardHtml(p){
   return `<div class="card" onclick="openProduct('${p.id}')">
     <div class="card-top">
       <div><h3 class="card-name">${esc(p.name||'(ohne Name)')}</h3><div class="card-kat">${esc(p.kategorie||'—')}</div></div>
-      <div class="dot ${dotCls}" title="${p.mhd?('MHD '+fmtDate(p.mhd)):'kein MHD'}"></div>
     </div>
     <div class="card-price">${eur(c.verkauf)}<span class="eur">€</span></div>
     <div class="card-row">
@@ -748,9 +769,7 @@ function cardHtml(p){
 function rowHtml(p){
   const c = rechnePreis(p);
   const st = mhdStatus(p);
-  const dotCls = st.key==='expired'||st.key==='today'?'dot-exp':st.key==='soon'?'dot-soon':st.key==='none'?'dot-off':'dot-on';
   return `<div class="prow" onclick="openProduct('${p.id}')">
-    <div class="dot ${dotCls}" title="${p.mhd?('MHD '+fmtDate(p.mhd)):'kein MHD'}"></div>
     <div class="prow-main">
       <div class="prow-name">${esc(p.name||'(ohne Name)')}</div>
       <div class="prow-sub">${esc(p.kategorie||'—')}${p.mhd?` · <span class="${st.key==='soon'||st.key==='today'||st.key==='expired'?'mhd-soon':''}">MHD ${new Date(p.mhd).toLocaleDateString('de-DE')}</span>`:''}</div>
@@ -816,6 +835,17 @@ function openProduct(id, prefill){
       </div></fieldset>
 
       <div class="calc" id="calcBox"></div>
+      <details class="kpi-help">
+        <summary>Was bedeuten diese Werte?</summary>
+        <div class="kpi-help-body">
+          <p><b>EK netto / EK brutto</b> — Einkaufspreis ohne bzw. mit Vorsteuer. Brutto ist das, was du dem Lieferanten zahlst.</p>
+          <p><b>VK netto / Verkaufspreis</b> — dein Verkaufspreis ohne USt. bzw. der Bruttopreis, den der Kunde zahlt.</p>
+          <p><b>Gewinn / Stück</b> — der tatsächliche Rohertrag je Stück: VK netto − EK netto. Steuern sind rausgerechnet.</p>
+          <p><b>USt. / Stück</b> — die Umsatzsteuer im Verkaufspreis. Gehört nicht dir, wird ans Finanzamt abgeführt.</p>
+          <p><b>Marge</b> — Anteil des Gewinns am Netto-Verkaufspreis (Handelsspanne). Gewinn ÷ VK netto.</p>
+          <p><b>Aufschlag a. EK</b> — wie viel % du auf den Einkauf draufschlägst. Gewinn ÷ EK netto. Entspricht eurer „Soll-Marge".</p>
+        </div>
+      </details>
 
       <div style="display:flex;gap:10px;margin-top:4px">
         ${!isNew?`<button class="btn btn-danger" onclick="delProduct('${p.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>`:''}
@@ -908,7 +938,20 @@ function saveProduct(id){
   })();
 }
 function delProduct(id){
-  if(!confirm('Produkt wirklich löschen?')) return;
+  const p=products.find(x=>x.id===id);
+  $('modal').innerHTML = `
+    <div class="modal-head"><h2>Produkt löschen?</h2>
+      <button class="x" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body">
+      <p class="d" style="margin-top:0"><b>${p?esc(p.name):'Dieses Produkt'}</b> wird endgültig gelöscht${USE_CLOUD?' — auch auf allen anderen Geräten':''}.</p>
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="openProduct('${id}')">Abbrechen</button>
+        <button class="btn btn-danger" style="flex:1;justify-content:center" onclick="confirmDelProduct('${id}')">Löschen</button>
+      </div>
+    </div>`;
+  showModal();
+}
+function confirmDelProduct(id){
   products = products.filter(x=>x.id!==id);
   persist(); closeModal(); render();
   if(USE_CLOUD){ cloudDelete('products', id).then(()=>toast('Gelöscht')).catch(()=>toast('Lokal gelöscht (Cloud-Fehler)')); }
@@ -1136,29 +1179,80 @@ function grundBadge(g){
   const cls = v==='Privatentnahme'?'mhdb-priv':(v==='MHD'||v==='Defekt'||v==='Bruchware')?'mhdb-exp':'mhdb-act';
   return `<span class="mhdb ${cls}">${esc(v)}</span>`;
 }
-/* --- Aktionen aus der Ablauf-Überwachung (Produkt -> Entscheidung) --- */
+/* --- Aktionen aus der Ablauf-Überwachung — schöne App-Masken --- */
 function aktionFor(pid){
   const p=products.find(x=>x.id===pid); if(!p) return;
   const c=rechnePreis(p);
-  const vorschlag = Math.max(0, Math.round((c.gerundet*0.7)/(num(settings.rundung)||0.10))*(num(settings.rundung)||0.10)); // ~30% runter, gerundet
-  const cur = (p.aktionspreis!=null&&p.aktionspreis!=='')?eur(p.aktionspreis):eur(vorschlag);
-  const inp = prompt(`Aktionspreis für „${p.name}" (€):\nProdukt bleibt in „Produkte" und zählt NICHT als Verderb.`, cur.replace('.',','));
-  if(inp==null) return;
-  p.aktionspreis = num(inp); p._updated=new Date().toISOString();
+  const step=num(settings.rundung)||0.10;
+  const vorschlag = Math.max(step, Math.ceil((c.gerundet*0.7 - 1e-9)/step)*step); // ~30% runter, aufgerundet
+  const cur = (p.aktionspreis!=null&&p.aktionspreis!=='')?num(p.aktionspreis):vorschlag;
+  $('modal').innerHTML = `
+    <div class="modal-head"><h2>Aktionspreis setzen</h2>
+      <button class="x" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body">
+      <p class="d" style="margin-top:0">Für <b>${esc(p.name)}</b>. Das Produkt bleibt in „Produkte" und zählt <b>nicht</b> als Verderb.</p>
+      <div class="qa-info">Regulärer Vorschlag ${eur(c.gerundet)} € · empfohlener Aktionspreis ${eur(vorschlag)} €</div>
+      <div class="field full"><label>Aktionspreis (€)</label><input id="qa_val" inputmode="decimal" value="${String(r2(cur)).replace('.',',')}" autofocus></div>
+      <div style="display:flex;gap:10px;margin-top:18px">
+        <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeModal()">Abbrechen</button>
+        <button class="btn btn-acc" style="flex:1;justify-content:center" onclick="confirmAktion('${p.id}')">Speichern</button>
+      </div>
+    </div>`;
+  showModal(); setTimeout(()=>{const e=$('qa_val'); if(e){e.focus();e.select();}},50);
+}
+function confirmAktion(pid){
+  const p=products.find(x=>x.id===pid); if(!p) return;
+  p.aktionspreis = num($('qa_val').value); p._updated=new Date().toISOString();
   persist(); if(USE_CLOUD){ cloudUpsert('products', p).catch(()=>{}); }
-  render(); toast('Aktionspreis gesetzt');
+  closeModal(); render(); toast('Aktionspreis gesetzt');
 }
 function privatFor(pid){
   const p=products.find(x=>x.id===pid); if(!p) return;
-  const menge = prompt(`Private Entnahme — „${p.name}"\nWie viele Stück entnommen?`, '1');
-  if(menge==null) return;
-  bookWaste(p, 'Privatentnahme', { private_entnahme:String(num(menge)||menge||'').trim(), menge:String(num(menge)||1) });
+  const maxB = num(p.bestand)>0&&num(p.bestand)<9999?num(p.bestand):1;
+  $('modal').innerHTML = `
+    <div class="modal-head"><h2>Private Entnahme</h2>
+      <button class="x" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body">
+      <p class="d" style="margin-top:0">Für <b>${esc(p.name)}</b>. Wird als private Entnahme dokumentiert.</p>
+      <div class="field full"><label>Entnommene Menge (Stück)</label><input id="qa_menge" inputmode="numeric" value="1" autofocus></div>
+      <div style="display:flex;gap:10px;margin-top:18px">
+        <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeModal()">Abbrechen</button>
+        <button class="btn btn-acc" style="flex:1;justify-content:center" onclick="confirmPrivat('${p.id}')">Buchen</button>
+      </div>
+    </div>`;
+  showModal(); setTimeout(()=>{const e=$('qa_menge'); if(e){e.focus();e.select();}},50);
+}
+function confirmPrivat(pid){
+  const p=products.find(x=>x.id===pid); if(!p) return;
+  const m=num($('qa_menge').value)||1;
+  closeModal();
+  bookWaste(p, 'Privatentnahme', { private_entnahme:String(m), menge:String(m) });
   toast('Private Entnahme gebucht');
 }
 function verderbFor(pid){
   const p=products.find(x=>x.id===pid); if(!p) return;
-  if(!confirm(`„${p.name}" als Warenverderb buchen?\nWird in den Verderb-Export aufgenommen.`)) return;
-  bookWaste(p, 'MHD', { menge:String(num(p.bestand)>0&&num(p.bestand)<9999?num(p.bestand):1) });
+  const def = num(p.bestand)>0&&num(p.bestand)<9999?num(p.bestand):1;
+  $('modal').innerHTML = `
+    <div class="modal-head"><h2>Als Warenverderb buchen</h2>
+      <button class="x" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body">
+      <p class="d" style="margin-top:0">Für <b>${esc(p.name)}</b>. Wird in den Verderb-Export aufgenommen.</p>
+      <div class="fgrid">
+        <div class="field"><label>Menge (Stück)</label><input id="qa_menge" inputmode="numeric" value="${def}" autofocus></div>
+        <div class="field"><label>Grund</label><select id="qa_grund">${VERDERB_KATS.filter(k=>k!=='Privatentnahme').map(k=>`<option value="${esc(k)}" ${k==='MHD'?'selected':''}>${esc(k)}</option>`).join('')}</select></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:18px">
+        <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeModal()">Abbrechen</button>
+        <button class="btn btn-danger" style="flex:1;justify-content:center" onclick="confirmVerderb('${p.id}')">Als Verderb buchen</button>
+      </div>
+    </div>`;
+  showModal(); setTimeout(()=>{const e=$('qa_menge'); if(e){e.focus();e.select();}},50);
+}
+function confirmVerderb(pid){
+  const p=products.find(x=>x.id===pid); if(!p) return;
+  const m=num($('qa_menge').value)||1; const grund=$('qa_grund')?$('qa_grund').value:'MHD';
+  closeModal();
+  bookWaste(p, grund, { menge:String(m) });
   toast('Als Verderb gebucht');
 }
 /* Erzeugt eine Verderb-/Privat-Position aus einem Produkt (Daten vorbefüllt). */
@@ -1235,8 +1329,21 @@ function saveVerderb(id){
   else toast(id?'Gespeichert':'Erfasst');
 }
 function delVerderb(id){
-  if(!confirm('Position löschen?'))return;
-  waste=waste.filter(x=>x.id!==id); persist(); closeModal&&closeModal(); render();
+  const w=waste.find(x=>x.id===id);
+  $('modal').innerHTML = `
+    <div class="modal-head"><h2>Position löschen?</h2>
+      <button class="x" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body">
+      <p class="d" style="margin-top:0">${w?esc(w.warenbezeichnung):'Diese Position'} wird endgültig entfernt.</p>
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeModal()">Abbrechen</button>
+        <button class="btn btn-danger" style="flex:1;justify-content:center" onclick="confirmDelVerderb('${id}')">Löschen</button>
+      </div>
+    </div>`;
+  showModal();
+}
+function confirmDelVerderb(id){
+  waste=waste.filter(x=>x.id!==id); persist(); closeModal(); render();
   if(USE_CLOUD){ cloudDelete('waste', id).then(()=>toast('Gelöscht')).catch(()=>toast('Lokal gelöscht (Cloud-Fehler)')); }
   else toast('Gelöscht');
 }
@@ -1255,6 +1362,12 @@ function exportVerderbCsv(){
 function renderDaten(){
   $('content').innerHTML = `
     <div class="page-head"><div><h1>Import / Export</h1><div class="sub">Daten ein- und ausgeben · kompatibel zu deiner bestehenden Seite</div></div></div>
+    <div class="setcard" style="margin-bottom:16px;border-color:var(--blue)">
+      <h3>↔ Vendon-Abgleich <span style="font-size:12px;color:var(--blue)">Automat</span></h3>
+      <p class="d">Lade den Produkt-Export aus Vendon (Excel). Das Tool gleicht ab, welche Artikel im Automaten aktiv sind und wo die Verkaufspreise abweichen. <b>Deine EK-Preise und Margen bleiben unangetastet</b> — Vendon liefert die nicht.</p>
+      <input type="file" id="vendonFile" accept=".xlsx,.xls" style="display:none" onchange="importVendon(this)">
+      <button class="btn btn-acc" onclick="$('vendonFile').click()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Vendon-Excel laden…</button>
+    </div>
     <div class="setcard" style="margin-bottom:16px;border-color:var(--acc-dim)">
       <h3>★ Aktuelle Liste von deiner Seite laden <span style="font-size:12px;color:var(--acc)">empfohlen</span></h3>
       <p class="d">Liest automatisch den Pfad aus, den deine Webseite (<code>app.js</code>) gerade nutzt — egal welches Datum die Datei hat. Ein Klick, kein Datei-Speichern.</p>
@@ -1320,6 +1433,104 @@ function importJson(input){
     catch(e){ alert('Fehler beim Lesen: '+e); } };
   fr.readAsText(file);
 }
+
+/* ===================== VENDON-ABGLEICH =====================
+   Vendon-Export liefert: Name, Preis (VK brutto), MwSt %, Kategorie.
+   KEIN EK, KEINE EAN -> wir gleichen nur ab, überschreiben NICHTS automatisch. */
+function importVendon(input){
+  const file=input.files[0]; if(!file)return;
+  if(typeof XLSX==='undefined'){ alert('Excel-Bibliothek nicht geladen. Bitte Seite neu laden.'); return; }
+  const fr=new FileReader();
+  fr.onload=()=>{
+    try{
+      const wb=XLSX.read(fr.result,{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,blankrows:false});
+      // Kopfzeile finden (enthält "Name" und "Preis")
+      let h=-1;
+      for(let i=0;i<rows.length;i++){ const r=(rows[i]||[]).map(x=>String(x||'').toLowerCase()); if(r.includes('name')&&r.some(c=>c.includes('preis'))){ h=i; break; } }
+      if(h<0){ alert('Konnte die Tabellenüberschrift (Name/Preis) nicht finden. Ist das ein Vendon-Produktexport?'); return; }
+      const head=(rows[h]||[]).map(x=>String(x||'').toLowerCase().trim());
+      const col=n=>head.findIndex(c=>c.includes(n));
+      const ci={name:col('name'), preis:head.findIndex(c=>c==='preis'||c==='preis '), mwst:col('mwst'), kat:col('kategor'), ek:col('einkauf')};
+      if(ci.preis<0) ci.preis=col('preis');
+      const items=[];
+      for(let i=h+1;i<rows.length;i++){
+        const r=rows[i]||[]; const name=String(r[ci.name]||'').trim(); if(!name) continue;
+        items.push({ name,
+          vk: num(String(r[ci.preis]).replace(',','.')),
+          mwst: parseInt(String(r[ci.mwst]||'').replace('%',''))||null,
+          kat: ci.kat>=0?String(r[ci.kat]||'').trim():'' });
+      }
+      if(!items.length){ alert('Keine Produktzeilen gefunden.'); return; }
+      showVendonReconcile(items);
+    }catch(e){ alert('Fehler beim Lesen der Vendon-Datei:\n'+e); }
+  };
+  fr.readAsArrayBuffer(file);
+}
+let _vendonItems=[];
+function showVendonReconcile(items){
+  _vendonItems=items;
+  const matched=[], pricediff=[], neu=[];
+  items.forEach(v=>{
+    const p=findProductByName(v.name);
+    if(!p){ neu.push(v); return; }
+    const c=rechnePreis(p);
+    if(v.vk>0 && Math.abs(v.vk - r2(c.verkauf))>0.005) pricediff.push({v,p,toolPreis:r2(c.verkauf)});
+    else matched.push({v,p});
+  });
+  // Im Tool, aber nicht (mehr) im Automaten
+  const vendonNames=new Set(items.map(v=>norm(v.name)));
+  const nichtImAutomat=products.filter(p=>!vendonNames.has(norm(p.name)));
+
+  $('modal').innerHTML = `
+    <div class="modal-head"><h2>Vendon-Abgleich</h2>
+      <button class="x" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body">
+      <div class="vend-stats">
+        <div class="vend-stat"><b>${items.length}</b><span>im Automaten</span></div>
+        <div class="vend-stat"><b>${matched.length}</b><span>identisch</span></div>
+        <div class="vend-stat ${pricediff.length?'warn':''}"><b>${pricediff.length}</b><span>Preis weicht ab</span></div>
+        <div class="vend-stat ${neu.length?'blue':''}"><b>${neu.length}</b><span>neu</span></div>
+      </div>
+      ${pricediff.length?`<h3 style="font-size:14px;margin:16px 0 8px">Preisabweichungen</h3>
+        <div class="vend-list">${pricediff.slice(0,200).map(x=>`<div class="vend-row">
+          <div class="vend-name">${esc(x.v.name)}</div>
+          <div class="vend-cmp">Tool ${eur(x.toolPreis)} € → Vendon <b>${eur(x.v.vk)} €</b></div>
+          <button class="btn btn-ghost btn-sm" onclick="adoptVendonPrice('${x.p.id}',${x.v.vk})">übernehmen</button>
+        </div>`).join('')}</div>`:''}
+      ${neu.length?`<h3 style="font-size:14px;margin:16px 0 8px">Neu in Vendon (noch nicht im Tool)</h3>
+        <p class="d" style="margin-bottom:8px">Anlegen legt das Produkt mit Vendon-Verkaufspreis als Preisschild an. EK/Marge danach selbst ergänzen.</p>
+        <div class="vend-list">${neu.slice(0,200).map((v,i)=>`<div class="vend-row">
+          <div class="vend-name">${esc(v.name)}<span class="vend-sub">${esc(v.kat||'')} · ${v.mwst||'?'} %</span></div>
+          <div class="vend-cmp">VK ${eur(v.vk)} €</div>
+          <button class="btn btn-ghost btn-sm" onclick="createFromVendon(${i})">anlegen</button>
+        </div>`).join('')}</div>`:''}
+      ${nichtImAutomat.length?`<h3 style="font-size:14px;margin:16px 0 8px">Im Tool, aber nicht im Automaten <span style="color:var(--txt3);font-weight:400">(${nichtImAutomat.length})</span></h3>
+        <div class="vend-list" style="max-height:140px">${nichtImAutomat.slice(0,200).map(p=>`<div class="vend-row"><div class="vend-name">${esc(p.name)}</div></div>`).join('')}</div>`:''}
+      ${(!pricediff.length&&!neu.length)?`<p class="d" style="margin-top:14px">✓ Alles im Einklang — keine Abweichungen.</p>`:''}
+      <div style="margin-top:18px"><button class="btn btn-acc" style="width:100%;justify-content:center" onclick="closeModal()">Fertig</button></div>
+    </div>`;
+  showModal();
+}
+function adoptVendonPrice(pid, vk){
+  const p=products.find(x=>x.id===pid); if(!p) return;
+  p.preisschild=r2(vk); p._updated=new Date().toISOString();
+  persist(); if(USE_CLOUD){ cloudUpsert('products', p).catch(()=>{}); }
+  toast('Preis übernommen'); showVendonReconcile(_vendonItems);   // Liste aktualisieren
+}
+function createFromVendon(idx){
+  const v=_vendonItems[idx]; if(!v) return;
+  const saved={ id:uid(), name:v.name, kategorie:v.kat||'', ean:'',
+    rohpreis:'', netto_brutto:'brutto', mwst_ek:(v.mwst===7||v.mwst===19)?v.mwst:settings.default_mwst,
+    marge_soll:settings.default_marge, pfand_aktiv:false, pfand_betrag:'',
+    preisschild:r2(v.vk), aktionspreis:'', bestand:999999, mhd:'', beliebtheit:'keine Angabe',
+    im_automat:true, _updated:new Date().toISOString() };
+  products.push(saved); persist();
+  if(USE_CLOUD){ cloudUpsert('products', saved).catch(()=>{}); }
+  toast('Produkt angelegt'); showVendonReconcile(_vendonItems);
+}
+
 async function importFromUrl(){
   const url=($('urlInput').value||'').trim();
   if(!url){ toast('Bitte URL eintragen'); return; }
