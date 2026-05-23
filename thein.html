@@ -132,6 +132,17 @@ input,select,textarea{font-family:inherit;font-size:15px}
 /* ---------- Product grid ---------- */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:13px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:15px 16px;transition:.14s;cursor:pointer;position:relative;overflow:hidden}
+.quickacts{position:absolute;top:10px;right:10px;display:flex;gap:6px;opacity:0;transition:.13s;z-index:2}
+.card:hover .quickacts{opacity:1}
+.qa-btn{width:30px;height:30px;border-radius:8px;background:var(--panel2);border:1px solid var(--line2);color:var(--txt2);display:flex;align-items:center;justify-content:center;transition:.12s}
+.qa-btn svg{width:15px;height:15px}
+.qa-btn:hover{background:var(--line);color:var(--txt)}
+.qa-del:hover{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}
+.is-dupe{border-color:var(--warn)!important;box-shadow:inset 3px 0 0 var(--warn)}
+.dupe-tag{font-size:10.5px;font-weight:600;color:var(--warn);background:var(--warn-bg);padding:1px 7px;border-radius:99px;margin-left:5px}
+.prow-acts{display:flex;gap:6px;flex-shrink:0;opacity:0;transition:.13s;margin-left:4px}
+.prow:hover .prow-acts{opacity:1}
+@media(max-width:860px){ .quickacts{opacity:1} .prow-acts{opacity:1} }
 .card:hover{border-color:var(--line2);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.25)}
 .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
 .card-name{font-weight:600;font-size:15px;line-height:1.25;margin:0}
@@ -259,6 +270,8 @@ input,select,textarea{font-family:inherit;font-size:15px}
 .vend-name{flex:1;min-width:0;font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .vend-sub{display:block;font-size:11px;color:var(--txt3);font-weight:400}
 .vend-cmp{font-family:var(--mono);font-size:12px;color:var(--txt2);white-space:nowrap}
+.vend-score{display:inline-block;background:rgba(91,157,255,.15);color:var(--blue);border-radius:99px;padding:0 6px;font-size:10.5px;font-weight:600;margin-left:4px}
+.vend-acts2{display:flex;gap:6px;flex-shrink:0}
 
 /* ---------- Table (Warenverderb) ---------- */
 .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel)}
@@ -492,7 +505,7 @@ let waste = [];
 let settings = {...DEFAULTS};
 let view = 'produkte';
 let search = '';
-let filter = { automat:false, abweichung:false, kat:'' };
+let filter = { automat:false, abweichung:false, dupes:false, kat:'' };
 let html5qr = null;
 let torchTrack = null;
 let scanHandled = false;            // verhindert Doppel-Auslösung beim Scan
@@ -554,7 +567,6 @@ const SORT_FIELDS = {
   kategorie:{label:'Kategorie',      val:p=>norm(p.kategorie), type:'str' },
   preis:   { label:'Preis',          val:p=>rechnePreis(p).verkauf, type:'num' },
   db:      { label:'Deckungsbeitrag',val:p=>rechnePreis(p).deckungsbeitrag, type:'num' },
-  bestand: { label:'Bestand',        val:p=>num(p.bestand), type:'num' },
   beliebt: { label:'Beliebtheit',    val:p=>BELIEBT_RANK[String(p.beliebtheit||'').toLowerCase()]??0, type:'num' },
   mhd:     { label:'Ablaufdatum (MHD)',val:p=>{ const t=mhdTage(p.mhd); return t==null?Infinity:t; }, type:'num' },
   geaendert:{label:'Zuletzt geändert',val:p=>p._updated?Date.parse(p._updated)||0:0, type:'num' }
@@ -569,11 +581,13 @@ function cmpBy(key, dir){
     return c*s;
   };
 }
-function getVisibleProducts(){
+function getVisibleProducts(dupes){
+  dupes = dupes || (filter.dupes ? duplicateIds() : null);
   let list = products.filter(p=>{
     if(search && !fuzzyMatch(search, [p.name,p.kategorie,p.ean].filter(Boolean).join(' '))) return false;
     if(filter.kat && p.kategorie!==filter.kat) return false;
     if(filter.abweichung && !rechnePreis(p).abweichung) return false;
+    if(filter.dupes && dupes && !dupes.has(p.id)) return false;
     return true;
   });
   const c1=cmpBy(sort1, sort1dir);
@@ -697,13 +711,14 @@ function setSync(s){ syncState=s; updateFoot(); }
 /* ---------- Produkte ---------- */
 function renderProdukte(){
   const kats = [...new Set(products.map(p=>p.kategorie).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'de'));
-  const list = getVisibleProducts();
+  const dupes = duplicateIds();
+  const list = getVisibleProducts(dupes);
   const abw = products.filter(p=>rechnePreis(p).abweichung).length;
   const sortOpts = (sel)=>Object.entries(SORT_FIELDS).map(([k,f])=>`<option value="${k}" ${sel===k?'selected':''}>${f.label}</option>`).join('');
 
   $('content').innerHTML = `
     <div class="page-head">
-      <div><h1>Produkte</h1><div class="sub">${products.length} gepflegt · ${abw} unter Vorschlag</div></div>
+      <div><h1>Produkte</h1><div class="sub">${products.length} gepflegt · ${abw} unter Vorschlag${dupes.size?` · <span style="color:var(--warn)">${dupes.size} Duplikate</span>`:''}</div></div>
       <div style="display:flex;gap:9px">
         <button class="btn btn-ghost" onclick="openScanner()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M4 12h16"/></svg>Scannen</button>
         <button class="btn btn-acc" onclick="openProduct(null)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>Neu</button>
@@ -735,9 +750,10 @@ function renderProdukte(){
       </div>
       <div class="chips sortchips">
         <button class="chip ${filter.abweichung?'on':''}" onclick="toggleFilter('abweichung')">Nur unter Vorschlag</button>
+        ${dupes.size?`<button class="chip ${filter.dupes?'on':''}" onclick="toggleFilter('dupes')">Nur Duplikate</button>`:''}
       </div>
     </div>
-    <div id="prodList">${renderItems(list)}</div>
+    <div id="prodList">${renderItems(list, dupes)}</div>
   `;
   const si = $('searchInput');
   si.oninput = ()=>{ search=si.value; lightRenderProducts(); };
@@ -745,25 +761,29 @@ function renderProdukte(){
   $('sort1').onchange = e=>{ sort1=e.target.value; saveViewPrefs(); lightRenderProducts(); };
   $('sort2').onchange = e=>{ sort2=e.target.value; saveViewPrefs(); lightRenderProducts(); };
 }
-function renderItems(list){
+function renderItems(list, dupes){
+  dupes = dupes || duplicateIds();
   if(!list.length){
     return `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg><div>${products.length? 'Keine Treffer.' : 'Noch keine Produkte. Lege eins an oder importiere deine JSON unter „Import / Export".'}</div></div>`;
   }
   return viewMode==='list'
-    ? `<div class="plist">${list.map(rowHtml).join('')}</div>`
-    : `<div class="grid">${list.map(cardHtml).join('')}</div>`;
+    ? `<div class="plist">${list.map(p=>rowHtml(p,dupes.has(p.id))).join('')}</div>`
+    : `<div class="grid">${list.map(p=>cardHtml(p,dupes.has(p.id))).join('')}</div>`;
 }
-function lightRenderProducts(){ const c=$('prodList'); if(c) c.innerHTML = renderItems(getVisibleProducts()); }
+function lightRenderProducts(){ const d=duplicateIds(); const c=$('prodList'); if(c) c.innerHTML = renderItems(getVisibleProducts(d), d); }
 function setViewMode(m){ if(viewMode===m) return; viewMode=m; saveViewPrefs(); $('vGrid')&&$('vGrid').classList.toggle('on',m==='grid'); $('vList')&&$('vList').classList.toggle('on',m==='list'); lightRenderProducts(); }
 function toggleSortDir(){ sort1dir = sort1dir==='asc'?'desc':'asc'; saveViewPrefs(); const b=$('sortDir'); if(b)b.textContent=sort1dir==='asc'?'↑':'↓'; lightRenderProducts(); }
-function cardHtml(p){
+function cardHtml(p, isDupe){
   const c = rechnePreis(p);
   const st = mhdStatus(p);
-  const dotCls = st.key==='expired'||st.key==='today'?'dot-exp':st.key==='soon'?'dot-soon':st.key==='none'?'dot-off':'dot-on';
   const mhdHtml = p.mhd ? `<span class="${st.key==='soon'||st.key==='today'||st.key==='expired'?'mhd-soon':''}">MHD ${new Date(p.mhd).toLocaleDateString('de-DE')}</span>` : '';
-  return `<div class="card" onclick="openProduct('${p.id}')">
+  return `<div class="card${isDupe?' is-dupe':''}" onclick="openProduct('${p.id}')">
+    <div class="quickacts" onclick="event.stopPropagation()">
+      <button class="qa-btn" title="Duplizieren" onclick="dupProduct('${p.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+      <button class="qa-btn qa-del" title="Löschen" onclick="delProduct('${p.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+    </div>
     <div class="card-top">
-      <div><h3 class="card-name">${esc(p.name||'(ohne Name)')}</h3><div class="card-kat">${esc(p.kategorie||'—')}</div></div>
+      <div><h3 class="card-name">${esc(p.name||'(ohne Name)')}</h3><div class="card-kat">${esc(p.kategorie||'—')}${isDupe?' <span class="dupe-tag">Duplikat</span>':''}</div></div>
     </div>
     <div class="card-price">${eur(c.verkauf)}<span class="eur">€</span></div>
     <div class="card-row">
@@ -774,19 +794,31 @@ function cardHtml(p){
     <div class="card-meta">${mhdHtml}<span>EK ${eur(c.ekBrutto)} €</span></div>
   </div>`;
 }
-function rowHtml(p){
+function rowHtml(p, isDupe){
   const c = rechnePreis(p);
   const st = mhdStatus(p);
-  return `<div class="prow" onclick="openProduct('${p.id}')">
+  return `<div class="prow${isDupe?' is-dupe':''}" onclick="openProduct('${p.id}')">
     <div class="prow-main">
-      <div class="prow-name">${esc(p.name||'(ohne Name)')}</div>
+      <div class="prow-name">${esc(p.name||'(ohne Name)')}${isDupe?' <span class="dupe-tag">Duplikat</span>':''}</div>
       <div class="prow-sub">${esc(p.kategorie||'—')}${p.mhd?` · <span class="${st.key==='soon'||st.key==='today'||st.key==='expired'?'mhd-soon':''}">MHD ${new Date(p.mhd).toLocaleDateString('de-DE')}</span>`:''}</div>
     </div>
     <div class="prow-db">Gewinn ${eur(c.gewinn)} €</div>
     <div class="prow-price">${c.abweichung?`<span class="tag tag-warn" style="margin-right:7px">⚠</span>`:''}${eur(c.verkauf)} €</div>
+    <div class="prow-acts" onclick="event.stopPropagation()">
+      <button class="qa-btn" title="Duplizieren" onclick="dupProduct('${p.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+      <button class="qa-btn qa-del" title="Löschen" onclick="delProduct('${p.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+    </div>
   </div>`;
 }
 function toggleFilter(k){ filter[k]=!filter[k]; render(); }
+/* Produkt duplizieren — neue ID, Name + " (Kopie)", sofort sichtbar. */
+function dupProduct(id){
+  const p=products.find(x=>x.id===id); if(!p) return;
+  const copy={...p, id:uid(), name:(p.name||'')+' (Kopie)', _updated:new Date().toISOString()};
+  products.push(copy); persist(); render();
+  if(USE_CLOUD){ cloudUpsert('products', copy).then(()=>toast('Dupliziert')).catch(()=>toast('Lokal dupliziert (Cloud-Fehler)')); }
+  else toast('Dupliziert');
+}
 
 /* ---------- Produkt-Modal ---------- */
 function openProduct(id, prefill){
@@ -837,9 +869,8 @@ function openProduct(id, prefill){
       <fieldset class="fieldset" style="border:none;padding:0;margin:0 0 20px"><legend>Verkauf & Status</legend><div class="fgrid">
         <div class="field"><label>Preisschild (€) <span class="hint">leer = Vorschlag</span></label><input id="f_schild" type="text" inputmode="decimal" value="${g('preisschild','')}" oninput="liveCalc()"></div>
         <div class="field"><label>Aktionspreis (€) <span class="hint">optional</span></label><input id="f_aktion" type="text" inputmode="decimal" value="${g('aktionspreis','')}" oninput="liveCalc()"></div>
-        <div class="field"><label>Bestand (Stück)</label><input id="f_bestand" type="text" inputmode="numeric" value="${g('bestand','999999')}"></div>
-        <div class="field"><label>MHD <span class="hint">optional</span></label><input id="f_mhd" type="date" value="${g('mhd','')}"></div>
-        <div class="field full"><label>Beliebtheit</label><select id="f_bel"><option ${g('beliebtheit','keine Angabe')==='keine Angabe'?'selected':''}>keine Angabe</option><option ${g('beliebtheit')==='niedrig'?'selected':''}>niedrig</option><option ${g('beliebtheit')==='mittel'?'selected':''}>mittel</option><option ${g('beliebtheit')==='hoch'?'selected':''}>hoch</option></select></div>
+        <div class="field"><label>MHD <span class="req">*Pflicht</span></label><input id="f_mhd" type="date" value="${g('mhd','')}"></div>
+        <div class="field"><label>Beliebtheit</label><select id="f_bel"><option ${g('beliebtheit','keine Angabe')==='keine Angabe'?'selected':''}>keine Angabe</option><option ${g('beliebtheit')==='niedrig'?'selected':''}>niedrig</option><option ${g('beliebtheit')==='mittel'?'selected':''}>mittel</option><option ${g('beliebtheit')==='hoch'?'selected':''}>hoch</option></select></div>
       </div></fieldset>
 
       <div class="calc" id="calcBox"></div>
@@ -874,7 +905,7 @@ function readForm(){
     pfand_typ:$('f_pfandtyp')?$('f_pfandtyp').value.trim():'',
     preisschild:$('f_schild').value.trim()===''?'':num($('f_schild').value),
     aktionspreis:$('f_aktion').value.trim()===''?'':num($('f_aktion').value),
-    bestand:num($('f_bestand').value), mhd:$('f_mhd').value, beliebtheit:$('f_bel').value,
+    mhd:$('f_mhd').value, beliebtheit:$('f_bel').value,
     gebinde_aktiv:$('f_geb')?$('f_geb').checked:false,
     gebinde_preis:$('f_gebpreis')&&$('f_gebpreis').value.trim()!==''?num($('f_gebpreis').value):'',
     gebinde_stueck:$('f_gebstk')&&$('f_gebstk').value.trim()!==''?num($('f_gebstk').value):''
@@ -933,6 +964,7 @@ function filterKatChips(){
 function saveProduct(id){
   const data = readForm();
   if(!data.name){ toast('Bitte einen Namen eingeben'); const e=$('f_name'); if(e)e.focus(); return; }
+  if(!data.mhd){ toast('Bitte MHD eintragen (Pflichtfeld)'); const e=$('f_mhd'); if(e){ e.focus(); try{e.showPicker&&e.showPicker();}catch(_){}} return; }
   data._updated = new Date().toISOString();   // für „zuletzt geändert"-Sortierung
   let saved;
   if(id){ const i=products.findIndex(x=>x.id===id); saved = products[i] = {...products[i], ...data}; }
@@ -1119,6 +1151,39 @@ function findProductByName(name){
   const n=norm(name); if(!n) return null;
   return products.find(p=>norm(p.name)===n) || products.find(p=>norm(p.name).includes(n)) || null;
 }
+/* Ähnlichkeit zweier Namen als 0..1 (1 = identisch). Kombiniert Zeichen- und Wort-Ebene,
+   damit Tippfehler, Leerzeichen, Bindestriche und Reihenfolge tolerant behandelt werden. */
+function nameSimilarity(a, b){
+  const x=norm(a), y=norm(b);
+  if(!x || !y) return 0;
+  if(x===y) return 1;
+  // 1) Zeichen-Ebene über Levenshtein auf zusammengezogenen Strings (ohne Leerzeichen).
+  const cx=x.replace(/ /g,''), cy=y.replace(/ /g,'');
+  const charSim = 1 - lev(cx, cy)/Math.max(cx.length, cy.length);
+  // 2) Wort-Ebene: Anteil gemeinsamer Wörter (Reihenfolge egal).
+  const wx=new Set(x.split(' ').filter(Boolean)), wy=new Set(y.split(' ').filter(Boolean));
+  let inter=0; wx.forEach(w=>{ if(wy.has(w)) inter++; });
+  const wordSim = inter/Math.max(wx.size, wy.size);
+  // Mischung: Zeichen-Ebene dominiert (fängt Tippfehler), Wort-Ebene stützt (fängt Umstellungen).
+  return Math.max(charSim, 0.6*charSim + 0.4*wordSim);
+}
+/* Bester Treffer aus den Produkten für einen Namen. Liefert {p, score} oder null. */
+function bestProductMatch(name){
+  let best=null, bestScore=0;
+  for(const p of products){
+    const s=nameSimilarity(name, p.name);
+    if(s>bestScore){ bestScore=s; best=p; }
+  }
+  return best ? {p:best, score:bestScore} : null;
+}
+/* Echte 1:1-Duplikate: gleicher normalisierter Name. Liefert Set von Produkt-IDs,
+   die mindestens einen Namenszwilling haben. */
+function duplicateIds(){
+  const byName={}, dupes=new Set();
+  products.forEach(p=>{ const k=norm(p.name); if(!k) return; (byName[k]=byName[k]||[]).push(p.id); });
+  Object.values(byName).forEach(ids=>{ if(ids.length>1) ids.forEach(id=>dupes.add(id)); });
+  return dupes;
+}
 function renderVerderb(){
   const rows = [...waste].sort((a,b)=>String(a.warenbezeichnung||'').localeCompare(String(b.warenbezeichnung||''),'de'));
   const sumBrutto = rows.reduce((s,w)=>s+num(w.ek_brutto)*num(w.menge||1),0);
@@ -1151,7 +1216,7 @@ function renderVerderb(){
           return `<div class="exprow">
             <div class="exprow-main">
               <div class="exprow-name">${esc(p.name||'(ohne Name)')}</div>
-              <div class="exprow-sub">MHD ${fmtDate(p.mhd)} ${badge} ${aktionHint} · Bestand ${esc(String(p.bestand??''))} · EK ${eur(c.ekBrutto)} €</div>
+              <div class="exprow-sub">MHD ${fmtDate(p.mhd)} ${badge} ${aktionHint} · EK ${eur(c.ekBrutto)} €</div>
             </div>
             <div class="exprow-acts">
               <button class="btn btn-ghost btn-sm" onclick="aktionFor('${p.id}')" title="Aktionspreis setzen — bleibt in Produkten">Aktion</button>
@@ -1216,7 +1281,6 @@ function confirmAktion(pid){
 }
 function privatFor(pid){
   const p=products.find(x=>x.id===pid); if(!p) return;
-  const maxB = num(p.bestand)>0&&num(p.bestand)<9999?num(p.bestand):1;
   $('modal').innerHTML = `
     <div class="modal-head"><h2>Private Entnahme</h2>
       <button class="x" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
@@ -1239,7 +1303,7 @@ function confirmPrivat(pid){
 }
 function verderbFor(pid){
   const p=products.find(x=>x.id===pid); if(!p) return;
-  const def = num(p.bestand)>0&&num(p.bestand)<9999?num(p.bestand):1;
+  const def = 1;
   $('modal').innerHTML = `
     <div class="modal-head"><h2>Als Warenverderb buchen</h2>
       <button class="x" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
@@ -1311,7 +1375,9 @@ function pickGrund(btn, grund){
 }
 /* Übernimmt Einzelpreis, MwSt, MHD, EK aus dem passenden Produkt — füllt nur leere Felder. */
 function verderbAutofill(){
-  const p=findProductByName($('w_name').value); if(!p) return;
+  let p=findProductByName($('w_name').value);
+  if(!p){ const m=bestProductMatch($('w_name').value); if(m && m.score>=0.82) p=m.p; }  // tolerant
+  if(!p) return;
   const c=rechnePreis(p);
   const setIf=(id,val)=>{ const e=$(id); if(e && e.value.trim()==='' && val!=null && val!=='') e.value=String(val).replace('.',','); };
   setIf('w_einzel', c.verkauf!=null?r2(c.verkauf):'');
@@ -1477,30 +1543,49 @@ function importVendon(input){
   fr.readAsArrayBuffer(file);
 }
 let _vendonItems=[];
+let _vendonConfirmed={};   // index -> productId, vom Nutzer bestätigte Zuordnungen
 function showVendonReconcile(items){
   _vendonItems=items;
-  const matched=[], pricediff=[], neu=[];
-  items.forEach(v=>{
-    const p=findProductByName(v.name);
-    if(!p){ neu.push(v); return; }
+  const AUTO=0.82, SUGGEST=0.68;   // Schwellen aus Tests
+  const matched=[], pricediff=[], vorschlag=[], neu=[];
+  const usedProductIds=new Set();
+  items.forEach((v,idx)=>{
+    // Vom Nutzer bestätigte Zuordnung hat Vorrang.
+    let p = _vendonConfirmed[idx]!=null ? products.find(x=>x.id===_vendonConfirmed[idx]) : null;
+    let score = p ? 1 : 0;
+    if(!p){
+      const exact=findProductByName(v.name);
+      if(exact){ p=exact; score=1; }
+      else { const m=bestProductMatch(v.name); if(m){ p=m.score>=SUGGEST?m.p:null; score=m.score; } }
+    }
+    if(!p){ neu.push({v,idx,score}); return; }
+    if(score<AUTO){ vorschlag.push({v,idx,p,score}); return; }   // unsicher -> bestätigen lassen
+    usedProductIds.add(p.id);
     const c=rechnePreis(p);
     if(v.vk>0 && Math.abs(v.vk - r2(c.verkauf))>0.005) pricediff.push({v,p,toolPreis:r2(c.verkauf)});
     else matched.push({v,p});
   });
-  // Im Tool, aber nicht (mehr) im Automaten
-  const vendonNames=new Set(items.map(v=>norm(v.name)));
-  const nichtImAutomat=products.filter(p=>!vendonNames.has(norm(p.name)));
+  const nichtImAutomat=products.filter(p=>!usedProductIds.has(p.id));
 
   $('modal').innerHTML = `
     <div class="modal-head"><h2>Vendon-Abgleich</h2>
       <button class="x" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     <div class="modal-body">
       <div class="vend-stats">
-        <div class="vend-stat"><b>${items.length}</b><span>im Automaten</span></div>
-        <div class="vend-stat"><b>${matched.length}</b><span>identisch</span></div>
+        <div class="vend-stat"><b>${matched.length+pricediff.length}</b><span>erkannt</span></div>
+        <div class="vend-stat ${vorschlag.length?'blue':''}"><b>${vorschlag.length}</b><span>zu prüfen</span></div>
         <div class="vend-stat ${pricediff.length?'warn':''}"><b>${pricediff.length}</b><span>Preis weicht ab</span></div>
         <div class="vend-stat ${neu.length?'blue':''}"><b>${neu.length}</b><span>neu</span></div>
       </div>
+      ${vorschlag.length?`<h3 style="font-size:14px;margin:16px 0 8px">Mögliche Treffer — bitte prüfen</h3>
+        <p class="d" style="margin-bottom:8px">Ähnliche Namen gefunden. Bestätige die Zuordnung oder lege neu an.</p>
+        <div class="vend-list">${vorschlag.slice(0,200).map(x=>`<div class="vend-row">
+          <div class="vend-name">${esc(x.v.name)}<span class="vend-sub">≈ ${esc(x.p.name)} <span class="vend-score">${Math.round(x.score*100)} %</span></span></div>
+          <div class="vend-acts2">
+            <button class="btn btn-acc btn-sm" onclick="confirmVendonMatch(${x.idx},'${x.p.id}')">ist dasselbe</button>
+            <button class="btn btn-ghost btn-sm" onclick="createFromVendon(${x.idx})">neu</button>
+          </div>
+        </div>`).join('')}</div>`:''}
       ${pricediff.length?`<h3 style="font-size:14px;margin:16px 0 8px">Preisabweichungen</h3>
         <div class="vend-list">${pricediff.slice(0,200).map(x=>`<div class="vend-row">
           <div class="vend-name">${esc(x.v.name)}</div>
@@ -1508,19 +1593,21 @@ function showVendonReconcile(items){
           <button class="btn btn-ghost btn-sm" onclick="adoptVendonPrice('${x.p.id}',${x.v.vk})">übernehmen</button>
         </div>`).join('')}</div>`:''}
       ${neu.length?`<h3 style="font-size:14px;margin:16px 0 8px">Neu in Vendon (noch nicht im Tool)</h3>
-        <p class="d" style="margin-bottom:8px">Anlegen legt das Produkt mit Vendon-Verkaufspreis als Preisschild an. EK/Marge danach selbst ergänzen.</p>
-        <div class="vend-list">${neu.slice(0,200).map((v,i)=>`<div class="vend-row">
-          <div class="vend-name">${esc(v.name)}<span class="vend-sub">${esc(v.kat||'')} · ${v.mwst||'?'} %</span></div>
-          <div class="vend-cmp">VK ${eur(v.vk)} €</div>
-          <button class="btn btn-ghost btn-sm" onclick="createFromVendon(${i})">anlegen</button>
+        <p class="d" style="margin-bottom:8px">Anlegen legt das Produkt mit Vendon-Verkaufspreis als Preisschild an. EK/Marge/MHD danach ergänzen.</p>
+        <div class="vend-list">${neu.slice(0,200).map(x=>`<div class="vend-row">
+          <div class="vend-name">${esc(x.v.name)}<span class="vend-sub">${esc(x.v.kat||'')} · ${x.v.mwst||'?'} %</span></div>
+          <div class="vend-cmp">VK ${eur(x.v.vk)} €</div>
+          <button class="btn btn-ghost btn-sm" onclick="createFromVendon(${x.idx})">anlegen</button>
         </div>`).join('')}</div>`:''}
       ${nichtImAutomat.length?`<h3 style="font-size:14px;margin:16px 0 8px">Im Tool, aber nicht im Automaten <span style="color:var(--txt3);font-weight:400">(${nichtImAutomat.length})</span></h3>
         <div class="vend-list" style="max-height:140px">${nichtImAutomat.slice(0,200).map(p=>`<div class="vend-row"><div class="vend-name">${esc(p.name)}</div></div>`).join('')}</div>`:''}
-      ${(!pricediff.length&&!neu.length)?`<p class="d" style="margin-top:14px">✓ Alles im Einklang — keine Abweichungen.</p>`:''}
-      <div style="margin-top:18px"><button class="btn btn-acc" style="width:100%;justify-content:center" onclick="closeModal()">Fertig</button></div>
+      ${(!pricediff.length&&!neu.length&&!vorschlag.length)?`<p class="d" style="margin-top:14px">✓ Alles im Einklang — keine Abweichungen.</p>`:''}
+      <div style="margin-top:18px"><button class="btn btn-acc" style="width:100%;justify-content:center" onclick="closeVendon()">Fertig</button></div>
     </div>`;
   showModal();
 }
+function confirmVendonMatch(idx, pid){ _vendonConfirmed[idx]=pid; showVendonReconcile(_vendonItems); }
+function closeVendon(){ _vendonConfirmed={}; closeModal(); }
 function adoptVendonPrice(pid, vk){
   const p=products.find(x=>x.id===pid); if(!p) return;
   p.preisschild=r2(vk); p._updated=new Date().toISOString();

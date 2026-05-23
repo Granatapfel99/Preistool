@@ -2,7 +2,7 @@
    Cacht NUR die App-Hülle (HTML/Icons), damit die App auch bei kurzem
    Netzausfall startet. Live-Daten (Supabase) werden NIE gecacht —
    die kommen immer frisch aus dem Netz. */
-const CACHE = 'thein-v1';
+const CACHE = 'thein-v2';
 const SHELL = ['thein.html', 'manifest.json', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
