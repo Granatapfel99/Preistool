@@ -77,6 +77,7 @@ input,select,textarea{font-family:inherit;font-size:15px}
 .main{flex:1;min-width:0;display:flex;flex-direction:column}
 .topbar{display:none}
 .content{padding:26px 30px 60px;max-width:1180px;width:100%;margin:0 auto;flex:1}
+.content.wide{max-width:1600px}
 .page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:20px;flex-wrap:wrap}
 .page-head h1{font-family:var(--disp);font-weight:700;font-size:27px;letter-spacing:-.7px;margin:0}
 .page-head .sub{color:var(--txt2);font-size:13.5px;margin-top:3px;font-family:var(--mono)}
@@ -277,12 +278,14 @@ input,select,textarea{font-family:inherit;font-size:15px}
 .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel)}
 table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:760px}
 th{text-align:left;padding:11px 13px;background:var(--bg2);color:var(--txt2);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--line);white-space:nowrap}
-td{padding:11px 13px;border-bottom:1px solid var(--line)}
+td{padding:11px 13px;border-bottom:1px solid var(--line);vertical-align:top}
 tr:last-child td{border-bottom:none}
 tbody tr:hover{background:var(--panel2)}
 .num{font-family:var(--mono);text-align:right;white-space:nowrap}
 .tdel{color:var(--txt3)}
 .tdel:hover{color:var(--warn)}
+/* Lange Textspalten umbrechen lassen -> weniger horizontales Scrollen */
+.tablewrap td.wrap{white-space:normal;min-width:160px;max-width:280px}
 
 /* ---------- Scanner ---------- */
 #reader{width:100%;border-radius:var(--radius);overflow:hidden;margin-bottom:14px;min-height:60px}
@@ -469,6 +472,48 @@ async function cloudDelete(table,id){ const {error}=await sb.from(table).delete(
 async function cloudReplaceAll(table,arr){
   const {error:e1}=await sb.from(table).delete().neq('id','__never__'); if(e1) throw e1;   // alle löschen
   if(arr.length){ const {error:e2}=await sb.from(table).upsert(arr.map(o=>({id:o.id, data:o}))); if(e2) throw e2; }
+}
+
+/* ---------- Automatische Backups ----------
+   Einmal pro Tag wird beim App-Start ein vollständiger Snapshot (Produkte,
+   Verderb, Einstellungen) in der Cloud-Tabelle 'backups' abgelegt. Läuft
+   unsichtbar, ohne Klick. Es werden die letzten ~30 Snapshots behalten. */
+async function autoBackupIfDue(){
+  if(!USE_CLOUD) return;
+  const today=new Date().toISOString().slice(0,10);
+  if(localStorage.getItem('thein_lastbackup')===today) return;   // heute schon gesichert
+  try{
+    const snapshot={ products, waste, settings:(()=>{const s={...settings};delete s.theme;return s;})() };
+    const id=today+'_'+Date.now().toString(36);
+    const {error}=await sb.from('backups').insert({ id, created_at:new Date().toISOString(), data:snapshot });
+    if(error) throw error;
+    localStorage.setItem('thein_lastbackup', today);
+    // Alte Backups aufräumen: nur die neuesten 30 behalten.
+    const {data}=await sb.from('backups').select('id').order('created_at',{ascending:false});
+    if(data && data.length>30){ const old=data.slice(30).map(r=>r.id); await sb.from('backups').delete().in('id',old); }
+  }catch(e){ /* still: Backup ist Bonus, darf den Start nie blockieren */ }
+}
+async function listBackups(){
+  if(!USE_CLOUD) return [];
+  try{ const {data}=await sb.from('backups').select('id,created_at').order('created_at',{ascending:false}).limit(30); return data||[]; }
+  catch(e){ return []; }
+}
+async function restoreBackup(id){
+  if(!USE_CLOUD) return;
+  const {data,error}=await sb.from('backups').select('data').eq('id',id).maybeSingle();
+  if(error || !data){ toast('Backup nicht gefunden'); return; }
+  const snap=data.data||{};
+  products=(snap.products||[]).map(p=>({id:p.id||uid(),...p}));
+  waste   =(snap.waste   ||[]).map(w=>({id:w.id||uid(),...w}));
+  settings={...DEFAULTS, ...(snap.settings||{}), theme:localTheme()};
+  persist();
+  try{
+    await cloudReplaceAll('products', products);
+    await cloudReplaceAll('waste', waste);
+    const biz={...settings}; delete biz.theme;
+    await sb.from('settings').upsert({id:1, data:biz});
+  }catch(e){}
+  applyTheme(); render(); closeModal(); toast('Backup wiederhergestellt');
 }
 
 /* ---------- Gelernte Namen je EAN (lokal + Cloud) ----------
@@ -699,6 +744,7 @@ function go(v){ view=v; render(); }
 function render(){
   renderNav();
   $('fabwrap').style.display = view==='produkte' ? 'flex' : 'none';
+  $('content').classList.toggle('wide', view==='verderb');   // Warenverderb nutzt volle Breite
   if(view==='produkte') renderProdukte();
   else if(view==='verderb') renderVerderb();
   else if(view==='daten') renderDaten();
@@ -1196,8 +1242,12 @@ function renderVerderb(){
   $('content').innerHTML = `
     <div class="page-head">
       <div><h1>Warenverderb</h1><div class="sub">${rows.length} gebuchte Positionen · Verderb-Wert (EK brutto) ${eur(sumBrutto)} €</div></div>
-      <div style="display:flex;gap:9px">
-        <button class="btn btn-ghost" onclick="exportVerderbCsv()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>CSV</button>
+      <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap">
+        <select class="selstyle" id="exportYear" title="Zeitraum für den Export (nach MHD-Jahr)">
+          <option value="">Gesamtlaufzeit</option>
+          ${wasteYears().map(y=>`<option value="${y}">Jahr ${y}</option>`).join('')}
+        </select>
+        <button class="btn btn-ghost" onclick="exportVerderbXlsx($('exportYear').value===''?null:parseInt($('exportYear').value))"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Excel</button>
         <button class="btn btn-acc" onclick="openVerderb(null)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>Position</button>
       </div>
     </div>
@@ -1233,7 +1283,7 @@ function renderVerderb(){
       <thead><tr><th>Grund</th><th>Warenbezeichnung</th><th>Menge</th><th>Einzelpreis</th><th>MwSt. [%]</th><th>MHD</th><th>Einkaufspreis Brutto</th><th>Einkaufspreis Netto</th><th>privat entnommene Menge</th><th>Kommentar</th><th></th></tr></thead>
       <tbody>${rows.map(w=>`<tr onclick="openVerderb('${w.id}')" style="cursor:pointer">
         <td>${grundBadge(w.grund||w.typ)}</td>
-        <td>${esc(w.warenbezeichnung)}</td>
+        <td class="wrap">${esc(w.warenbezeichnung)}</td>
         <td class="num">${esc(w.menge||'')}</td>
         <td class="num">${w.einzelpreis!=null&&w.einzelpreis!==''?eur(w.einzelpreis)+' €':'—'}</td>
         <td class="num">${w.mwst!=null&&w.mwst!==''?w.mwst:'—'}</td>
@@ -1241,7 +1291,7 @@ function renderVerderb(){
         <td class="num">${w.ek_brutto!=null&&w.ek_brutto!==''?eur(w.ek_brutto)+' €':'—'}</td>
         <td class="num">${w.ek_netto!=null&&w.ek_netto!==''?eur(w.ek_netto)+' €':'—'}</td>
         <td class="num">${esc(w.private_entnahme||'—')}</td>
-        <td>${esc(w.kommentar||'')}</td>
+        <td class="wrap">${esc(w.kommentar||'')}</td>
         <td class="tdel num" onclick="event.stopPropagation();delVerderb('${w.id}')">✕</td>
       </tr>`).join('')}</tbody></table></div>`
       :`<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg><div>Noch keine Verderb-Positionen gebucht.</div></div>`}
@@ -1421,13 +1471,75 @@ function confirmDelVerderb(id){
   if(USE_CLOUD){ cloudDelete('waste', id).then(()=>toast('Gelöscht')).catch(()=>toast('Lokal gelöscht (Cloud-Fehler)')); }
   else toast('Gelöscht');
 }
-function exportVerderbCsv(){
-  const head=['Grund','Warenbezeichnung','Menge','Einzelpreis','MwSt [%]','MHD','Einkaufspreis Brutto','Einkaufspreis Netto','privat entnommene Menge','Kommentar'];
-  const lines=[`${settings.inhaber_name};${settings.inhaber_email}`, `${new Date().getFullYear()} - Warenverderb`, '', head.join(';')];
-  waste.forEach(w=>lines.push([w.grund||w.typ,w.warenbezeichnung,w.menge,w.einzelpreis,w.mwst,w.mhd,w.ek_brutto,w.ek_netto,w.private_entnahme,w.kommentar]
-    .map(v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`).join(';')));
-  download('warenverderb_'+new Date().getFullYear()+'.csv', '\uFEFF'+lines.join('\n'), 'text/csv');
-  toast('CSV exportiert');
+/* Liefert das MHD-Jahr einer Verderb-Position (aus TT.MM.JJJJ oder ISO).
+   Fällt zurück auf das Buchungsjahr (_updated), falls kein MHD vorhanden. */
+function wasteMhdYear(w){
+  const s=String(w.mhd||'').trim();
+  let m=s.match(/(\d{4})/);                          // findet vierstelliges Jahr
+  if(m) return parseInt(m[1]);
+  if(w._updated){ const d=new Date(w._updated); if(!isNaN(d)) return d.getFullYear(); }
+  return null;
+}
+/* Alle Jahre, die in den Verderb-Daten vorkommen (für das Dropdown). */
+function wasteYears(){
+  const ys=new Set(); waste.forEach(w=>{ const y=wasteMhdYear(w); if(y) ys.add(y); });
+  return [...ys].sort((a,b)=>b-a);
+}
+/* Datum TT.MM.JJJJ / ISO -> JS-Date (für echte Excel-Datumszelle). */
+function parseDateLoose(s){
+  s=String(s||'').trim(); if(!s) return null;
+  let m=s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/); if(m) return new Date(+m[3],+m[2]-1,+m[1]);
+  const d=new Date(s); return isNaN(d)?null:d;
+}
+/* Professioneller Excel-Export (.xlsx) mit korrekten Zell-Typen & -Formaten.
+   filterYear: null = Gesamtlaufzeit, sonst nur Positionen mit diesem MHD-Jahr. */
+function exportVerderbXlsx(filterYear){
+  if(typeof XLSX==='undefined'){ toast('Excel-Bibliothek lädt noch — kurz warten'); return; }
+  const rows = waste.filter(w => filterYear==null || wasteMhdYear(w)===filterYear)
+                    .sort((a,b)=>String(a.warenbezeichnung||'').localeCompare(String(b.warenbezeichnung||''),'de'));
+  if(!rows.length){ toast('Keine Positionen für diesen Zeitraum'); return; }
+  const jahrLabel = filterYear==null ? 'Gesamt' : String(filterYear);
+
+  // Kopfzeilen wie in Thomas' Vorlage + Spaltenüberschriften.
+  const aoa = [
+    [settings.inhaber_name||''],
+    ['Email: '+(settings.inhaber_email||'')],
+    [jahrLabel+' - Warenverderb'],
+    [],
+    ['Grund','Warenbezeichnung','Menge','Einzelpreis','MwSt. [%]','MHD','Einkaufspreis Brutto','Einkaufspreis Netto','privat entnommene Menge','Kommentar']
+  ];
+  const headRows = aoa.length;
+  rows.forEach(w=>{
+    aoa.push([
+      w.grund||w.typ||'', w.warenbezeichnung||'',
+      w.menge!==''&&w.menge!=null?num(w.menge):'',
+      w.einzelpreis!==''&&w.einzelpreis!=null?num(w.einzelpreis):'',
+      w.mwst!==''&&w.mwst!=null?num(w.mwst):'',
+      parseDateLoose(w.mhd) || (w.mhd||''),
+      w.ek_brutto!==''&&w.ek_brutto!=null?num(w.ek_brutto):'',
+      w.ek_netto!==''&&w.ek_netto!=null?num(w.ek_netto):'',
+      w.private_entnahme||'', w.kommentar||''
+    ]);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa, {cellDates:true});
+  // Spaltenbreiten (an Vorlage angelehnt).
+  ws['!cols']=[{wch:20},{wch:42},{wch:8},{wch:13},{wch:10},{wch:12},{wch:21},{wch:20},{wch:24},{wch:30}];
+  // Zell-Formate setzen: Währung (D,G,H), Ganzzahl (C,E), Datum (F).
+  const EUR='#,##0.00\\ "€"';
+  for(let r=headRows; r<aoa.length; r++){
+    const set=(col,fmt)=>{ const ref=XLSX.utils.encode_cell({r, c:col}); const cell=ws[ref]; if(cell && cell.v!=='' && cell.v!=null){ cell.z=fmt; } };
+    set(3, EUR);   // Einzelpreis
+    set(6, EUR);   // EK Brutto
+    set(7, EUR);   // EK Netto
+    const dref=XLSX.utils.encode_cell({r, c:5}); const dcell=ws[dref];   // MHD
+    if(dcell && dcell.t==='d'){ dcell.z='dd.mm.yyyy'; }
+  }
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Warenverderb '+jahrLabel);
+  const fname = filterYear==null ? 'warenverderb_gesamt.xlsx' : 'warenverderb_'+filterYear+'.xlsx';
+  XLSX.writeFile(wb, fname);
+  toast('Excel exportiert ('+jahrLabel+')');
 }
 
 /* =====================================================================
@@ -1466,7 +1578,7 @@ function renderDaten(){
       <div style="display:flex;gap:9px;flex-wrap:wrap">
         <button class="btn btn-acc" onclick="exportWebJson()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Webseiten-JSON</button>
         <button class="btn btn-ghost" onclick="exportBackup()">Voll-Backup</button>
-        <button class="btn btn-ghost" onclick="exportVerderbCsv()">Verderb-CSV</button>
+        <button class="btn btn-ghost" onclick="exportVerderbXlsx(null)">Verderb-Excel</button>
       </div>
     </div>`;
 }
@@ -1724,11 +1836,44 @@ function renderEinstellungen(){
       </div>
       <h3 style="margin-top:22px">Darstellung</h3>
       <div class="field full"><div class="inline-toggle"><label class="switch"><input type="checkbox" id="s_dark" ${settings.theme==='dark'?'checked':''} onchange="toggleTheme()"><span class="slider"></span></label><span>Dark Mode</span></div></div>
-      ${USE_CLOUD?`<h3 style="margin-top:22px">Konto</h3>
+      ${USE_CLOUD?`<h3 style="margin-top:22px">Automatische Backups</h3>
+      <p class="d" style="margin-bottom:10px">Es wird automatisch täglich ein Snapshot in der Cloud gesichert (die letzten 30 bleiben erhalten). Keine Aktion nötig.</p>
+      <button class="btn btn-ghost" style="width:100%;justify-content:center" onclick="openBackups()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9 9 0 0 0-6.36 2.64L3 8"/><path d="M3 3v5h5M12 7v5l3 3"/></svg>Backups anzeigen / wiederherstellen</button>
+      <h3 style="margin-top:22px">Konto</h3>
       <p class="d" style="margin-bottom:10px">Angemeldet als <b>${esc(currentUserEmail||'—')}</b></p>
       <button class="btn btn-ghost" style="width:100%;justify-content:center" onclick="doLogout()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Abmelden</button>`:''}
       <button class="btn btn-acc" style="margin-top:20px;width:100%;justify-content:center" onclick="saveSettings()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6 9 17l-5-5"/></svg>Einstellungen speichern</button>
       <button class="btn btn-danger" style="margin-top:10px;width:100%;justify-content:center" onclick="wipe()">Alle lokalen Daten löschen</button>
+    </div>`;
+}
+async function openBackups(){
+  $('modal').innerHTML = `
+    <div class="modal-head"><h2>Backups</h2>
+      <button class="x" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body"><p class="d" id="bkLoading" style="margin-top:0">Lade Backups…</p><div id="bkList"></div></div>`;
+  showModal();
+  const list=await listBackups();
+  const ld=$('bkLoading'); if(ld) ld.style.display='none';
+  const el=$('bkList'); if(!el) return;
+  if(!list.length){ el.innerHTML='<p class="d">Noch keine automatischen Backups vorhanden. Das erste entsteht beim nächsten Tagesstart.</p>'; return; }
+  el.innerHTML = `<div class="vend-list">${list.map(b=>{
+    const d=new Date(b.created_at); const lbl=isNaN(d)?b.id:d.toLocaleString('de-DE');
+    return `<div class="vend-row">
+      <div class="vend-name">${esc(lbl)}</div>
+      <button class="btn btn-ghost btn-sm" onclick="confirmRestore('${b.id}','${esc(lbl)}')">wiederherstellen</button>
+    </div>`;
+  }).join('')}</div>`;
+}
+function confirmRestore(id, lbl){
+  $('modal').innerHTML = `
+    <div class="modal-head"><h2>Backup wiederherstellen?</h2>
+      <button class="x" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body">
+      <p class="d" style="margin-top:0">Der Stand vom <b>${esc(lbl)}</b> wird geladen und ersetzt die aktuellen Daten — auf allen Geräten.</p>
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="openBackups()">Abbrechen</button>
+        <button class="btn btn-danger" style="flex:1;justify-content:center" onclick="restoreBackup('${id}')">Wiederherstellen</button>
+      </div>
     </div>`;
 }
 function saveSettings(){
@@ -1770,6 +1915,8 @@ document.addEventListener('click',e=>{ if($('katPanel') && !e.target.closest('.k
 function scheduleReload(){
   clearTimeout(reloadTimer);
   reloadTimer=setTimeout(async()=>{
+    // Nicht neu rendern, während der Nutzer in einem offenen Modal arbeitet -> Eingaben schützen.
+    if($('overlay') && $('overlay').classList.contains('show')){ reloadTimer=setTimeout(scheduleReload,1500); return; }
     try{ products=await loadProducts(); waste=await loadWaste(); settings=await loadSettings(); applyTheme(); render(); }catch(e){}
   }, 250);
 }
@@ -1787,6 +1934,18 @@ function subscribeRealtime(){
       }
     });
 }
+/* App wieder im Vordergrund / Netz zurück -> frisch laden & Realtime erneuern.
+   So sieht man Änderungen ohne App-Neustart, auch wenn die Verbindung pausiert war. */
+let _lastResume=0;
+function resumeSync(){
+  if(!USE_CLOUD) return;
+  const now=Date.now(); if(now-_lastResume<2000) return; _lastResume=now;   // Doppelauslösung dämpfen
+  scheduleReload();
+  subscribeRealtime();
+}
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) resumeSync(); });
+window.addEventListener('online', resumeSync);
+window.addEventListener('focus', resumeSync);
 
 /* =====================================================================
    AUTH  (Login — nur im Cloud-Modus)
@@ -1818,6 +1977,7 @@ async function startCloud(){
     settings = await loadSettings();
     applyTheme(); render(); setSync('live');
     subscribeRealtime();
+    autoBackupIfDue();   // täglicher Snapshot (unsichtbar, max. 1x/Tag)
   }catch(e){ setSync('offline'); toast('Cloud nicht erreichbar — lokaler Stand'); }
 }
 function teardownCloud(){
