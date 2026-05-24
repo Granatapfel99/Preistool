@@ -313,6 +313,8 @@ tbody tr:hover{background:var(--panel2)}
 .dashkpi.bad .dashkpi-val{color:var(--warn)}
 .dashnote{border-radius:var(--radius-sm);padding:11px 14px;font-size:13.5px;margin-bottom:16px}
 .dashnote.bad{background:var(--warn-bg);border:1px solid var(--warn);color:var(--warn)}
+.dashnote.info{background:rgba(91,157,255,.1);border:1px solid var(--blue);color:var(--blue)}
+.dashnote.info:hover{background:rgba(91,157,255,.16)}
 .dashcols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 @media(max-width:820px){.dashcols{grid-template-columns:1fr}}
 .dashcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
@@ -352,6 +354,9 @@ tbody tr:hover{background:var(--panel2)}
 .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--panel2);border:1px solid var(--line2);color:var(--txt);padding:12px 20px;border-radius:99px;font-size:14px;font-weight:500;box-shadow:0 10px 30px rgba(0,0,0,.4);opacity:0;transition:.22s;z-index:200;display:flex;align-items:center;gap:9px;pointer-events:none}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast svg{width:17px;height:17px;color:var(--acc)}
+.toast.undo{pointer-events:auto;padding-right:8px}
+.toast-undo{background:var(--acc);color:#08130a;border:none;border-radius:99px;padding:6px 14px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+.toast-undo:hover{filter:brightness(1.08)}
 
 /* ---------- Login ---------- */
 .login-overlay{position:fixed;inset:0;background:var(--bg);z-index:300;display:none;align-items:center;justify-content:center;padding:24px;
@@ -643,7 +648,7 @@ let waste = [];
 let settings = {...DEFAULTS};
 let view = 'dashboard';
 let search = '';
-let filter = { automat:false, abweichung:false, dupes:false, kat:'' };
+let filter = { automat:false, abweichung:false, dupes:false, unvollstaendig:false, kat:'' };
 let html5qr = null;
 let torchTrack = null;
 let scanHandled = false;            // verhindert Doppel-Auslösung beim Scan
@@ -664,6 +669,12 @@ const num = v => { const n = parseFloat(String(v).replace(',','.')); return isNa
 const eur = v => num(v).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});
 const r2 = v => Math.round(num(v)*100)/100;
 const r4 = v => Math.round(num(v)*10000)/10000;
+/* Cent-genaue Summe: jede Position wird EINZELN auf Cent gerundet (Einzelpreis × Menge),
+   dann summiert. So ergibt „angezeigte Werte zusammengezählt" exakt die Summe —
+   nachvollziehbar wie in der Buchhaltung (kaufmännisch runden, dann addieren). */
+function sumCent(rows, field){
+  return rows.reduce((s,w)=> s + r2(num(w[field]) * num(w.menge||1)), 0);
+}
 const esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function nextId(arr){ let m=0; arr.forEach(x=>{const n=parseInt(x.id);if(!isNaN(n)&&n>m)m=n}); return String(m+1); }
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); } // geräteübergreifend eindeutig
@@ -727,6 +738,7 @@ function getVisibleProducts(dupes){
     if(filter.kat && p.kategorie!==filter.kat) return false;
     if(filter.abweichung && !rechnePreis(p).abweichung) return false;
     if(filter.dupes && dupes && !dupes.has(p.id)) return false;
+    if(filter.unvollstaendig && !(num(p.rohpreis)<=0 || !String(p.mhd||'').trim())) return false;
     return true;
   });
   const c1=cmpBy(sort1, sort1dir);
@@ -735,7 +747,16 @@ function getVisibleProducts(dupes){
   list.sort((a,b)=>{ let c=c1(a,b); if(c) return c; if(c2){ c=c2(a,b); if(c) return c; } return cName(a,b); });
   return list;
 }
-function toast(msg){ const t=$('toast'); t.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>'+esc(msg); t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2400); }
+function toast(msg){ const t=$('toast'); t.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>'+esc(msg); t.classList.add('show'); t.classList.remove('undo'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2400); }
+/* Toast mit „Rückgängig"-Button (für Löschungen). onUndo wird bei Klick ausgeführt. */
+let _undoFn=null;
+function toastUndo(msg, onUndo){
+  const t=$('toast'); _undoFn=onUndo;
+  t.innerHTML = '<span style="flex:1">'+esc(msg)+'</span><button class="toast-undo" onclick="runUndo()">Rückgängig</button>';
+  t.classList.add('show','undo'); clearTimeout(t._t);
+  t._t=setTimeout(()=>{ t.classList.remove('show','undo'); _undoFn=null; }, 6000);
+}
+function runUndo(){ const fn=_undoFn; _undoFn=null; const t=$('toast'); t.classList.remove('show','undo'); if(fn) fn(); }
 
 /* =====================================================================
    PREIS-ENGINE — fachlich geprüft & dokumentiert.
@@ -831,7 +852,11 @@ function renderNav(){
   $('nav').innerHTML = NAV.map(n=>`<button class="${view===n.id?'active':''}" onclick="go('${n.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${n.icon}</svg>${n.label}</button>`).join('');
   $('botnav').innerHTML = NAV.map(n=>`<button class="${view===n.id?'active':''}" onclick="go('${n.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${n.icon}</svg><span>${n.label.split(' ')[0]}</span></button>`).join('');
 }
-function go(v){ view=v; render(); }
+function go(v, setFilter){
+  view=v;
+  if(setFilter){ filter.abweichung=false; filter.dupes=false; filter.unvollstaendig=false; filter.kat=''; filter[setFilter]=true; }
+  render();
+}
 
 /* =====================================================================
    RENDER
@@ -873,8 +898,8 @@ function renderDashboard(){
   // Verderb laufendes Jahr
   const jahr=new Date().getFullYear();
   const wasteJahr = waste.filter(w=>wasteMhdYear(w)===jahr);
-  const verderbBrutto = wasteJahr.reduce((s,w)=>s+num(w.ek_brutto)*num(w.menge||1),0);
-  const verderbNetto  = wasteJahr.reduce((s,w)=>s+num(w.ek_netto)*num(w.menge||1),0);
+  const verderbBrutto = sumCent(wasteJahr, 'ek_brutto');
+  const verderbNetto  = sumCent(wasteJahr, 'ek_netto');
 
   // Verderb-Gründe (laufendes Jahr) zählen
   const grundCount={};
@@ -888,6 +913,11 @@ function renderDashboard(){
     .filter(x=>x.c.gewinn<0 || x.c.abweichung || (x.c.margeNetto<20 && x.c.vkNetto>0))
     .sort((a,b)=>a.c.margeNetto-b.c.margeNetto)
     .forEach(x=>{ if(!seen.has(x.p.id)){ seen.add(x.p.id); sorgen.push(x); } });
+
+  // Unvollständige Produkte: kein EK-Preis hinterlegt oder kein MHD (z.B. frische Vendon-Importe).
+  const ohneEk  = products.filter(p=>num(p.rohpreis)<=0).length;
+  const ohneMhd = products.filter(p=>!String(p.mhd||'').trim()).length;
+  const unvollstaendig = products.filter(p=>num(p.rohpreis)<=0 || !String(p.mhd||'').trim()).length;
 
   const kpi=(val,label,cls,onclick)=>`<div class="dashkpi ${cls||''}" ${onclick?`onclick="${onclick}" style="cursor:pointer"`:''}><div class="dashkpi-val">${val}</div><div class="dashkpi-lbl">${label}</div></div>`;
 
@@ -904,6 +934,7 @@ function renderDashboard(){
     </div>
 
     ${negativ?`<div class="dashnote bad">⚠ ${negativ} Produkt${negativ===1?'':'e'} mit negativem Gewinn — bitte Preis prüfen.</div>`:''}
+    ${unvollstaendig?`<div class="dashnote info" onclick="go('produkte','unvollstaendig')" style="cursor:pointer">ℹ ${unvollstaendig} Produkt${unvollstaendig===1?'':'e'} unvollständig${ohneEk?` · ${ohneEk} ohne EK-Preis`:''}${ohneMhd?` · ${ohneMhd} ohne MHD`:''} — zum Pflegen antippen.</div>`:''}
 
     <div class="dashcols">
       <div class="dashcard">
@@ -939,6 +970,7 @@ function renderDashboard(){
 function renderProdukte(){
   const kats = [...new Set(products.map(p=>p.kategorie).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'de'));
   const dupes = duplicateIds();
+  const unvollCount = products.filter(p=>num(p.rohpreis)<=0 || !String(p.mhd||'').trim()).length;
   const list = getVisibleProducts(dupes);
   const abw = products.filter(p=>rechnePreis(p).abweichung).length;
   const sortOpts = (sel)=>Object.entries(SORT_FIELDS).map(([k,f])=>`<option value="${k}" ${sel===k?'selected':''}>${f.label}</option>`).join('');
@@ -978,6 +1010,7 @@ function renderProdukte(){
       <div class="chips sortchips">
         <button class="chip ${filter.abweichung?'on':''}" onclick="toggleFilter('abweichung')">Nur unter Vorschlag</button>
         ${dupes.size?`<button class="chip ${filter.dupes?'on':''}" onclick="toggleFilter('dupes')">Nur Duplikate</button>`:''}
+        ${unvollCount?`<button class="chip ${filter.unvollstaendig?'on':''}" onclick="toggleFilter('unvollstaendig')">Nur unvollständige</button>`:''}
       </div>
     </div>
     <div id="prodList">${renderItems(list, dupes)}</div>
@@ -1227,10 +1260,17 @@ function delProduct(id){
   showModal();
 }
 function confirmDelProduct(id){
+  const removed = products.find(x=>x.id===id);
   products = products.filter(x=>x.id!==id);
   persist(); closeModal(); render();
-  if(USE_CLOUD){ cloudDelete('products', id).then(()=>toast('Gelöscht')).catch(()=>toast('Lokal gelöscht (Cloud-Fehler)')); }
-  else toast('Gelöscht');
+  if(USE_CLOUD){ cloudDelete('products', id).catch(()=>{}); }
+  if(removed){
+    toastUndo('„'+(removed.name||'Produkt')+'" gelöscht', ()=>{
+      products.push(removed); persist(); render();
+      if(USE_CLOUD){ cloudUpsert('products', removed).catch(()=>{}); }
+      toast('Wiederhergestellt');
+    });
+  } else toast('Gelöscht');
 }
 
 /* =====================================================================
@@ -1529,8 +1569,8 @@ function productMhdYear(p){ const s=String(p.mhd||'');const m=s.match(/(\d{4})/)
 
 function renderVerderb(){
   const allRows = [...waste].sort((a,b)=>String(a.warenbezeichnung||'').localeCompare(String(b.warenbezeichnung||''),'de'));
-  const sumBrutto = allRows.reduce((s,w)=>s+num(w.ek_brutto)*num(w.menge||1),0);
-  const sumNetto  = allRows.reduce((s,w)=>s+num(w.ek_netto)*num(w.menge||1),0);
+  const sumBrutto = sumCent(allRows, 'ek_brutto');
+  const sumNetto  = sumCent(allRows, 'ek_netto');
 
   // Ablauf-Kandidaten aus den Produkten (abgelaufen + bald ablaufend).
   const kandidaten = products.map(p=>({p, st:mhdStatus(p)}))
@@ -1559,8 +1599,8 @@ function renderVerderb(){
     const open = y!=='—' && verderbOpenYears.has(parseInt(y));
     const kand = kandByYear[y]||[];
     const rws  = rowsByYear[y]||[];
-    const yBrutto = rws.reduce((s,w)=>s+num(w.ek_brutto)*num(w.menge||1),0);
-    const yNetto  = rws.reduce((s,w)=>s+num(w.ek_netto)*num(w.menge||1),0);
+    const yBrutto = sumCent(rws, 'ek_brutto');
+    const yNetto  = sumCent(rws, 'ek_netto');
     return `
     <div class="yeargroup ${open?'open':''}">
       <button class="yearhead" onclick="toggleVerderbYear('${y}')">
@@ -1798,9 +1838,16 @@ function delVerderb(id){
   showModal();
 }
 function confirmDelVerderb(id){
+  const removed = waste.find(x=>x.id===id);
   waste=waste.filter(x=>x.id!==id); persist(); closeModal(); render();
-  if(USE_CLOUD){ cloudDelete('waste', id).then(()=>toast('Gelöscht')).catch(()=>toast('Lokal gelöscht (Cloud-Fehler)')); }
-  else toast('Gelöscht');
+  if(USE_CLOUD){ cloudDelete('waste', id).catch(()=>{}); }
+  if(removed){
+    toastUndo('„'+(removed.warenbezeichnung||'Position')+'" gelöscht', ()=>{
+      waste.push(removed); persist(); render();
+      if(USE_CLOUD){ cloudUpsert('waste', removed).catch(()=>{}); }
+      toast('Wiederhergestellt');
+    });
+  } else toast('Gelöscht');
 }
 /* Liefert das MHD-Jahr einer Verderb-Position (aus TT.MM.JJJJ oder ISO).
    Fällt zurück auf das Buchungsjahr (_updated), falls kein MHD vorhanden. */
