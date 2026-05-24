@@ -302,6 +302,34 @@ tbody tr:hover{background:var(--panel2)}
 .katmanage-row:last-child{border-bottom:none}
 .katmanage-name{flex:1;font-size:13.5px;font-weight:500}
 .katmanage-cnt{font-family:var(--mono);font-size:12px;color:var(--txt3)}
+/* ---------- Dashboard ---------- */
+.dashgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.dashkpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;transition:.12s}
+.dashkpi[style*=cursor]:hover{border-color:var(--line2);transform:translateY(-1px)}
+.dashkpi-val{font-family:var(--mono);font-size:26px;font-weight:700;line-height:1.1}
+.dashkpi-lbl{font-size:12px;color:var(--txt3);margin-top:4px}
+.dashkpi.ok .dashkpi-val{color:var(--acc)}
+.dashkpi.warn .dashkpi-val{color:#ffb44d}
+.dashkpi.bad .dashkpi-val{color:var(--warn)}
+.dashnote{border-radius:var(--radius-sm);padding:11px 14px;font-size:13.5px;margin-bottom:16px}
+.dashnote.bad{background:var(--warn-bg);border:1px solid var(--warn);color:var(--warn)}
+.dashcols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:820px){.dashcols{grid-template-columns:1fr}}
+.dashcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+.dashcard h3{margin:0 0 14px;font-size:15px}
+.dashcard-sub{font-size:12px;color:var(--txt3);font-weight:400;margin-left:6px}
+.dashlist{display:flex;flex-direction:column;gap:2px}
+.dashrow{display:flex;align-items:center;gap:10px;padding:9px 8px;border-radius:var(--radius-sm);cursor:pointer;transition:.1s}
+.dashrow:hover{background:var(--panel2)}
+.dashrow-main{flex:1;min-width:0}
+.dashrow-name{font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dashrow-sub{font-size:11.5px;color:var(--txt3)}
+.dashrow-tags{display:flex;gap:5px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end}
+.dashbars{display:flex;flex-direction:column;gap:11px}
+.dashbar-top{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px}
+.dashbar-cnt{font-family:var(--mono);color:var(--txt2)}
+.dashbar-track{height:8px;background:var(--bg2);border-radius:99px;overflow:hidden}
+.dashbar-fill{height:100%;background:var(--acc);border-radius:99px;transition:width .3s}
 
 /* ---------- Scanner ---------- */
 #reader{width:100%;border-radius:var(--radius);overflow:hidden;margin-bottom:14px;min-height:60px}
@@ -606,7 +634,7 @@ async function loadSettings(){
 let products = [];
 let waste = [];
 let settings = {...DEFAULTS};
-let view = 'produkte';
+let view = 'dashboard';
 let search = '';
 let filter = { automat:false, abweichung:false, dupes:false, kat:'' };
 let html5qr = null;
@@ -785,6 +813,7 @@ function fmtDate(d){ const x=new Date(d); return isNaN(x)?'':x.toLocaleDateStrin
    NAVIGATION
    ===================================================================== */
 const NAV = [
+  {id:'dashboard', label:'Übersicht', icon:'<rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/>'},
   {id:'produkte', label:'Produkte', icon:'<path d="M3 9h18M9 21V9M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/>'},
   {id:'verderb', label:'Warenverderb', icon:'<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/>'},
   {id:'daten', label:'Import / Export', icon:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>'},
@@ -803,7 +832,8 @@ function render(){
   renderNav();
   $('fabwrap').style.display = view==='produkte' ? 'flex' : 'none';
   $('content').classList.toggle('wide', view==='verderb');   // Warenverderb nutzt volle Breite
-  if(view==='produkte') renderProdukte();
+  if(view==='dashboard') renderDashboard();
+  else if(view==='produkte') renderProdukte();
   else if(view==='verderb') renderVerderb();
   else if(view==='daten') renderDaten();
   else if(view==='einstellungen') renderEinstellungen();
@@ -811,6 +841,90 @@ function render(){
 }
 function updateFoot(){ const f=$('foot'); if(f) f.textContent = `${products.length} Produkte · ${waste.length} Verderb · ${SYNC_LABEL[syncState]||syncState}`; }
 function setSync(s){ syncState=s; updateFoot(); }
+
+/* ---------- Dashboard (Startseite) ---------- */
+function renderDashboard(){
+  const n = products.length;
+  // Kennzahlen übers Sortiment
+  let margenSum=0, margenCnt=0, unterVorschlag=[], schwach=[], negativ=0;
+  products.forEach(p=>{
+    const c=rechnePreis(p);
+    if(c.vkNetto>0){ margenSum+=c.margeNetto; margenCnt++; }
+    if(c.abweichung) unterVorschlag.push({p,c});
+    if(c.gewinn<0) negativ++;
+    else if(c.margeNetto<20 && c.vkNetto>0) schwach.push({p,c});
+  });
+  const avgMarge = margenCnt? (margenSum/margenCnt) : 0;
+
+  // Ablauf-Kandidaten (gleiche Logik wie Warenverderb)
+  const ablauf = products.map(p=>({p,st:mhdStatus(p)}))
+    .filter(x=>x.st.key==='expired'||x.st.key==='today'||x.st.key==='soon')
+    .sort((a,b)=>(a.st.t??0)-(b.st.t??0));
+  const abgelaufen = ablauf.filter(x=>x.st.key==='expired'||x.st.key==='today').length;
+
+  // Verderb laufendes Jahr
+  const jahr=new Date().getFullYear();
+  const wasteJahr = waste.filter(w=>wasteMhdYear(w)===jahr);
+  const verderbWert = wasteJahr.reduce((s,w)=>s+num(w.ek_brutto)*num(w.menge||1),0);
+
+  // Verderb-Gründe (laufendes Jahr) zählen
+  const grundCount={};
+  wasteJahr.forEach(w=>{ const g=w.grund||w.typ||'—'; grundCount[g]=(grundCount[g]||0)+num(w.menge||1); });
+  const gruende=Object.entries(grundCount).sort((a,b)=>b[1]-a[1]);
+  const grundMax=gruende.length?gruende[0][1]:0;
+
+  // Sorgenkinder kombiniert: erst negativ, dann unter Vorschlag, dann schwache Marge — Duplikate raus.
+  const seen=new Set(); const sorgen=[];
+  products.map(p=>({p,c:rechnePreis(p)}))
+    .filter(x=>x.c.gewinn<0 || x.c.abweichung || (x.c.margeNetto<20 && x.c.vkNetto>0))
+    .sort((a,b)=>a.c.margeNetto-b.c.margeNetto)
+    .forEach(x=>{ if(!seen.has(x.p.id)){ seen.add(x.p.id); sorgen.push(x); } });
+
+  const kpi=(val,label,cls,onclick)=>`<div class="dashkpi ${cls||''}" ${onclick?`onclick="${onclick}" style="cursor:pointer"`:''}><div class="dashkpi-val">${val}</div><div class="dashkpi-lbl">${label}</div></div>`;
+
+  $('content').innerHTML = `
+    <div class="page-head"><div><h1>Übersicht</h1><div class="sub">Dein Lagebild auf einen Blick · ${SYNC_LABEL[syncState]||syncState}</div></div></div>
+
+    <div class="dashgrid">
+      ${kpi(n, 'Produkte gepflegt', '', "go('produkte')")}
+      ${kpi(avgMarge.toFixed(0)+' %', 'Ø Marge (netto)', avgMarge<25?'warn':'ok')}
+      ${kpi(unterVorschlag.length, 'unter Vorschlag', unterVorschlag.length?'warn':'ok', "go('produkte')")}
+      ${kpi(abgelaufen, 'abgelaufen / heute', abgelaufen?'bad':'ok', "go('verderb')")}
+      ${kpi(ablauf.length, 'läuft bald ab', ablauf.length?'warn':'ok', "go('verderb')")}
+      ${kpi(eur(verderbWert)+' €', 'Verderb-Wert '+jahr, '', "go('verderb')")}
+    </div>
+
+    ${negativ?`<div class="dashnote bad">⚠ ${negativ} Produkt${negativ===1?'':'e'} mit negativem Gewinn — bitte Preis prüfen.</div>`:''}
+
+    <div class="dashcols">
+      <div class="dashcard">
+        <h3>Sorgenkinder <span class="dashcard-sub">schwächste Marge zuerst</span></h3>
+        ${sorgen.length?`<div class="dashlist">${sorgen.slice(0,12).map(({p,c})=>`
+          <div class="dashrow" onclick="openProduct('${p.id}')">
+            <div class="dashrow-main"><div class="dashrow-name">${esc(p.name||'(ohne Name)')}</div><div class="dashrow-sub">${esc(p.kategorie||'—')} · VK ${eur(c.verkauf)} €</div></div>
+            <div class="dashrow-tags">
+              ${c.gewinn<0?`<span class="tag tag-warn">Verlust</span>`:''}
+              ${c.abweichung?`<span class="tag tag-warn">unter Vorschlag</span>`:''}
+              <span class="tag ${c.margeNetto<20?'tag-warn':'tag-mut'}">${c.margeNetto.toFixed(0)} % Marge</span>
+            </div>
+          </div>`).join('')}</div>
+          ${sorgen.length>12?`<p class="d" style="margin:10px 2px 0">… und ${sorgen.length-12} weitere. <a onclick="go('produkte')" style="color:var(--acc);cursor:pointer">Alle ansehen</a></p>`:''}`
+          :`<p class="d">Alles im grünen Bereich — keine Produkte unter Vorschlag oder mit schwacher Marge. 👍</p>`}
+      </div>
+
+      <div class="dashcard">
+        <h3>Verderb ${jahr} <span class="dashcard-sub">nach Grund</span></h3>
+        ${gruende.length?`<div class="dashbars">${gruende.map(([g,cnt])=>`
+          <div class="dashbar">
+            <div class="dashbar-top"><span>${esc(g)}</span><span class="dashbar-cnt">${cnt}×</span></div>
+            <div class="dashbar-track"><div class="dashbar-fill" style="width:${grundMax?Math.round(cnt/grundMax*100):0}%"></div></div>
+          </div>`).join('')}</div>
+          <p class="d" style="margin:12px 2px 0">Gesamt-Verderbwert ${jahr}: <b>${eur(verderbWert)} €</b> (EK brutto)</p>`
+          :`<p class="d">Noch kein Verderb in ${jahr} gebucht.</p>`}
+      </div>
+    </div>
+  `;
+}
 
 /* ---------- Produkte ---------- */
 function renderProdukte(){
@@ -1600,6 +1714,53 @@ function parseDateLoose(s){
 }
 /* Professioneller Excel-Export (.xlsx) mit korrekten Zell-Typen & -Formaten.
    filterYear: null = Gesamtlaufzeit, sonst nur Positionen mit diesem MHD-Jahr. */
+/* Produktliste als professionelle Excel-Tabelle exportieren (Inventur/Steuerberater). */
+function exportProductsXlsx(){
+  if(typeof XLSX==='undefined'){ toast('Excel-Bibliothek lädt noch — kurz warten'); return; }
+  if(!products.length){ toast('Keine Produkte vorhanden'); return; }
+  const rows=[...products].sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'de'));
+  const aoa=[
+    [settings.inhaber_name||''],
+    ['Produktliste · Stand '+new Date().toLocaleDateString('de-DE')],
+    [],
+    ['Produkt','Kategorie','EAN','EK netto','EK brutto','MwSt. [%]','Soll-Marge [%]','Verkaufspreis','Gewinn/Stück','Marge [%]','Aufschlag [%]','MHD','Pfand']
+  ];
+  const headRows=aoa.length;
+  rows.forEach(p=>{
+    const c=rechnePreis(p);
+    aoa.push([
+      p.name||'', p.kategorie||'', String(p.ean||''),
+      r4(c.ekNetto), r2(c.ekBrutto), num(p.mwst_ek||settings.default_mwst),
+      num(p.marge_soll||settings.default_marge), r2(c.verkauf), r2(c.gewinn),
+      Math.round(c.margeNetto), Math.round(c.aufschlag),
+      parseDateLoose(p.mhd)||(p.mhd||''), p.pfand_aktiv?r2(num(p.pfand_betrag)):''
+    ]);
+  });
+  const ws=XLSX.utils.aoa_to_sheet(aoa,{cellDates:true});
+  ws['!cols']=[{wch:34},{wch:16},{wch:15},{wch:11},{wch:11},{wch:10},{wch:13},{wch:14},{wch:13},{wch:10},{wch:12},{wch:12},{wch:9}];
+  const EUR='#,##0.00\\ "€"', PCT='0\\ "%"';
+  const lastCol=12, lastRow=aoa.length-1;
+  const EURCOLS=new Set([3,4,7,8,12]), PCTCOLS=new Set([5,6,9,10]);
+  const NUMCOLS=new Set([3,4,5,6,7,8,9,10,12]);
+  for(let r=headRows;r<=lastRow;r++){
+    for(let c=0;c<=lastCol;c++){
+      const cell=ws[XLSX.utils.encode_cell({r,c})]; if(!cell) continue;
+      if(EURCOLS.has(c)) cell.z=EUR;
+      else if(PCTCOLS.has(c)) cell.z=PCT;
+      else if(c===11 && cell.t==='d') cell.z='dd.mm.yyyy';
+      cell.s={alignment:{horizontal:NUMCOLS.has(c)?'center':'left',vertical:'center'}};
+    }
+  }
+  for(let c=0;c<=lastCol;c++){ const cell=ws[XLSX.utils.encode_cell({r:headRows-1,c})]; if(cell) cell.s={font:{bold:true},alignment:{horizontal:'center',vertical:'center',wrapText:true}}; }
+  ws['!autofilter']={ref:`${XLSX.utils.encode_cell({r:headRows-1,c:0})}:${XLSX.utils.encode_cell({r:lastRow,c:lastCol})}`};
+  ws['!freeze']={xSplit:0,ySplit:headRows};
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Produkte');
+  XLSX.writeFile(wb,'produktliste_'+new Date().toISOString().slice(0,10)+'.xlsx',{cellDates:true});
+  toast('Produktliste exportiert');
+}
+
+/* Professioneller Excel-Export der Verderb-Daten (.xlsx) mit korrekten Zell-Typen.
+   filterYear: null = Gesamtlaufzeit, sonst nur Positionen mit diesem MHD-Jahr. */
 function exportVerderbXlsx(filterYear){
   if(typeof XLSX==='undefined'){ toast('Excel-Bibliothek lädt noch — kurz warten'); return; }
   const rows = waste.filter(w => filterYear==null || wasteMhdYear(w)===filterYear)
@@ -1698,6 +1859,7 @@ function renderDaten(){
       <p class="d">„Webseiten-JSON" hat exakt das Format deiner app.js — kannst du in deinen <code>export/</code>-Ordner legen, die alte Seite läuft weiter. „Voll-Backup" sichert alles (inkl. Verderb &amp; Einstellungen) zum Wiedereinspielen.</p>
       <div style="display:flex;gap:9px;flex-wrap:wrap">
         <button class="btn btn-acc" onclick="exportWebJson()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Webseiten-JSON</button>
+        <button class="btn btn-ghost" onclick="exportProductsXlsx()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Produktliste-Excel</button>
         <button class="btn btn-ghost" onclick="exportBackup()">Voll-Backup</button>
         <button class="btn btn-ghost" onclick="requestExport(null)">Verderb-Excel</button>
       </div>
