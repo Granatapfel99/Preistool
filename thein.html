@@ -1936,16 +1936,25 @@ function subscribeRealtime(){
 }
 /* App wieder im Vordergrund / Netz zurück -> frisch laden & Realtime erneuern.
    So sieht man Änderungen ohne App-Neustart, auch wenn die Verbindung pausiert war. */
-let _lastResume=0;
+let _lastResume=0, _pollTimer=null;
 function resumeSync(){
   if(!USE_CLOUD) return;
-  const now=Date.now(); if(now-_lastResume<2000) return; _lastResume=now;   // Doppelauslösung dämpfen
+  const now=Date.now(); if(now-_lastResume<800) return; _lastResume=now;   // Doppelauslösung dämpfen
   scheduleReload();
   subscribeRealtime();
 }
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) resumeSync(); });
 window.addEventListener('online', resumeSync);
 window.addEventListener('focus', resumeSync);
+/* Sicherheitsnetz: solange die App sichtbar & online ist, alle 20 s leise abgleichen.
+   Fängt seltene verpasste Realtime-Events ab -> alles bleibt garantiert aktuell.
+   (Greift nicht, wenn ein Modal offen ist — scheduleReload schützt die Eingabe.) */
+function startPolling(){
+  if(_pollTimer) clearInterval(_pollTimer);
+  _pollTimer=setInterval(()=>{
+    if(USE_CLOUD && !document.hidden && navigator.onLine) scheduleReload();
+  }, 20000);
+}
 
 /* =====================================================================
    AUTH  (Login — nur im Cloud-Modus)
@@ -1977,6 +1986,7 @@ async function startCloud(){
     settings = await loadSettings();
     applyTheme(); render(); setSync('live');
     subscribeRealtime();
+    startPolling();      // 20s-Sicherheitsnetz für garantierte Aktualität
     autoBackupIfDue();   // täglicher Snapshot (unsichtbar, max. 1x/Tag)
   }catch(e){ setSync('offline'); toast('Cloud nicht erreichbar — lokaler Stand'); }
 }
