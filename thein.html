@@ -865,7 +865,8 @@ function renderDashboard(){
   // Verderb laufendes Jahr
   const jahr=new Date().getFullYear();
   const wasteJahr = waste.filter(w=>wasteMhdYear(w)===jahr);
-  const verderbWert = wasteJahr.reduce((s,w)=>s+num(w.ek_brutto)*num(w.menge||1),0);
+  const verderbBrutto = wasteJahr.reduce((s,w)=>s+num(w.ek_brutto)*num(w.menge||1),0);
+  const verderbNetto  = wasteJahr.reduce((s,w)=>s+num(w.ek_netto)*num(w.menge||1),0);
 
   // Verderb-Gründe (laufendes Jahr) zählen
   const grundCount={};
@@ -891,7 +892,7 @@ function renderDashboard(){
       ${kpi(unterVorschlag.length, 'unter Vorschlag', unterVorschlag.length?'warn':'ok', "go('produkte')")}
       ${kpi(abgelaufen, 'abgelaufen / heute', abgelaufen?'bad':'ok', "go('verderb')")}
       ${kpi(ablauf.length, 'läuft bald ab', ablauf.length?'warn':'ok', "go('verderb')")}
-      ${kpi(eur(verderbWert)+' €', 'Verderb-Wert '+jahr, '', "go('verderb')")}
+      ${kpi(eur(verderbNetto)+' €', 'Verderb netto '+jahr+' · '+eur(verderbBrutto)+' € brutto', '', "go('verderb')")}
     </div>
 
     ${negativ?`<div class="dashnote bad">⚠ ${negativ} Produkt${negativ===1?'':'e'} mit negativem Gewinn — bitte Preis prüfen.</div>`:''}
@@ -919,7 +920,7 @@ function renderDashboard(){
             <div class="dashbar-top"><span>${esc(g)}</span><span class="dashbar-cnt">${cnt}×</span></div>
             <div class="dashbar-track"><div class="dashbar-fill" style="width:${grundMax?Math.round(cnt/grundMax*100):0}%"></div></div>
           </div>`).join('')}</div>
-          <p class="d" style="margin:12px 2px 0">Gesamt-Verderbwert ${jahr}: <b>${eur(verderbWert)} €</b> (EK brutto)</p>`
+          <p class="d" style="margin:12px 2px 0">Verderbwert ${jahr}: <b>${eur(verderbNetto)} €</b> netto · ${eur(verderbBrutto)} € brutto</p>`
           :`<p class="d">Noch kein Verderb in ${jahr} gebucht.</p>`}
       </div>
     </div>
@@ -1422,6 +1423,7 @@ function productMhdYear(p){ const s=String(p.mhd||'');const m=s.match(/(\d{4})/)
 function renderVerderb(){
   const allRows = [...waste].sort((a,b)=>String(a.warenbezeichnung||'').localeCompare(String(b.warenbezeichnung||''),'de'));
   const sumBrutto = allRows.reduce((s,w)=>s+num(w.ek_brutto)*num(w.menge||1),0);
+  const sumNetto  = allRows.reduce((s,w)=>s+num(w.ek_netto)*num(w.menge||1),0);
 
   // Ablauf-Kandidaten aus den Produkten (abgelaufen + bald ablaufend).
   const kandidaten = products.map(p=>({p, st:mhdStatus(p)}))
@@ -1451,12 +1453,13 @@ function renderVerderb(){
     const kand = kandByYear[y]||[];
     const rws  = rowsByYear[y]||[];
     const yBrutto = rws.reduce((s,w)=>s+num(w.ek_brutto)*num(w.menge||1),0);
+    const yNetto  = rws.reduce((s,w)=>s+num(w.ek_netto)*num(w.menge||1),0);
     return `
     <div class="yeargroup ${open?'open':''}">
       <button class="yearhead" onclick="toggleVerderbYear('${y}')">
         <svg class="ycaret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 18l6-6-6-6"/></svg>
         <span class="ytitle">${y==='—'?'Ohne MHD-Jahr':y}</span>
-        <span class="ymeta">${rws.length} Pos.${kand.length?` · ${kand.length} ablaufend`:''} · ${eur(yBrutto)} €</span>
+        <span class="ymeta">${rws.length} Pos.${kand.length?` · ${kand.length} ablaufend`:''} · ${eur(yNetto)} € netto / ${eur(yBrutto)} € brutto</span>
       </button>
       <div class="yearbody" ${open?'':'hidden'}>
         ${kand.length?`
@@ -1503,7 +1506,7 @@ function renderVerderb(){
 
   $('content').innerHTML = `
     <div class="page-head">
-      <div><h1>Warenverderb</h1><div class="sub">${allRows.length} gebuchte Positionen · Verderb-Wert (EK brutto) ${eur(sumBrutto)} €</div></div>
+      <div><h1>Warenverderb</h1><div class="sub">${allRows.length} gebuchte Positionen · Verderb-Wert ${eur(sumNetto)} € netto · ${eur(sumBrutto)} € brutto</div></div>
       <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap">
         <select class="selstyle" id="exportYear" title="Zeitraum für den Export (nach MHD-Jahr)">
           <option value="">Gesamtlaufzeit</option>
