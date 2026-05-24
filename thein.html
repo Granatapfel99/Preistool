@@ -330,6 +330,13 @@ tbody tr:hover{background:var(--panel2)}
 .dashbar-cnt{font-family:var(--mono);color:var(--txt2)}
 .dashbar-track{height:8px;background:var(--bg2);border-radius:99px;overflow:hidden}
 .dashbar-fill{height:100%;background:var(--acc);border-radius:99px;transition:width .3s}
+/* EAN-Feld mit Scan-/Lookup-Buttons */
+.ean-row{display:flex;gap:7px}
+.ean-row input{flex:1}
+.ean-btn{flex-shrink:0;width:44px;border-radius:9px;background:var(--bg2);border:1px solid var(--line);color:var(--txt2);display:flex;align-items:center;justify-content:center;transition:.12s}
+.ean-btn svg{width:19px;height:19px}
+.ean-btn:hover{background:var(--line);color:var(--acc);border-color:var(--acc-dim)}
+.ean-btn.disabled{opacity:.4;pointer-events:none}
 
 /* ---------- Scanner ---------- */
 #reader{width:100%;border-radius:var(--radius);overflow:hidden;margin-bottom:14px;min-height:60px}
@@ -640,6 +647,7 @@ let filter = { automat:false, abweichung:false, dupes:false, kat:'' };
 let html5qr = null;
 let torchTrack = null;
 let scanHandled = false;            // verhindert Doppel-Auslösung beim Scan
+let editingProductId = null;        // aktuell in der Maske bearbeitetes Produkt (für In-Form-Scan)
 let syncState = USE_CLOUD ? 'connecting' : 'lokal';
 let rtChannel = null, reloadTimer = null;
 const SYNC_LABEL = { lokal:'lokal', connecting:'verbinde…', live:'● live', reconnecting:'reconnect…', offline:'offline' };
@@ -1041,7 +1049,9 @@ function dupProduct(id){
 
 /* ---------- Produkt-Modal ---------- */
 function openProduct(id, prefill){
-  const p = id ? products.find(x=>x.id===id) : (prefill||{});
+  const base = id ? products.find(x=>x.id===id) : {};
+  const p = Object.assign({}, base||{}, prefill||{});   // prefill überschreibt (für Reopen nach Scan)
+  editingProductId = id || null;
   const isNew = !id;
   const kats = [...new Set(products.map(x=>x.kategorie).filter(Boolean))].sort();
   const g = (k,d='')=> p[k]!=null ? p[k] : d;
@@ -1060,7 +1070,13 @@ function openProduct(id, prefill){
           </div>
           ${kats.length?`<div class="katpanel" id="katPanel"><div class="katchips" id="katChips">${kats.map(k=>`<button type="button" class="katchip" data-cat="${esc(k.toLowerCase())}" onclick="pickKat(this)">${esc(k)}</button>`).join('')}</div></div>`:''}
         </div>
-        <div class="field"><label>EAN / Barcode</label><input id="f_ean" value="${esc(g('ean'))}" placeholder="optional"></div>
+        <div class="field"><label>EAN / Barcode</label>
+          <div class="ean-row">
+            <input id="f_ean" value="${esc(g('ean'))}" placeholder="optional" oninput="updateEanButtons()">
+            <button type="button" class="ean-btn" id="eanScanBtn" title="Barcode scannen" onclick="scanIntoForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 7v10M11 7v10M16 7v10"/></svg></button>
+            <button type="button" class="ean-btn" id="eanLookupBtn" title="Name zur EAN holen" onclick="lookupNameIntoForm()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></button>
+          </div>
+        </div>
       </div></div>
 
       <fieldset class="fieldset" style="border:none;padding:0;margin:0 0 20px"><legend>Einkauf</legend>
@@ -1358,6 +1374,97 @@ async function lookupEan(ean){
     if(name){ el.value=name; toast('Produkt erkannt'); }
     else    { toast('Nicht gefunden — Name bitte selbst eintragen'); }
   }
+}
+
+/* ===================================================================
+   Barcode-Scanner & Lookup INNERHALB der Produkt-Bearbeiten-Maske.
+   Sichert die aktuellen Eingaben, scannt, öffnet das Formular danach
+   wieder mit gemergten Werten und holt fehlende Infos intelligent nach. */
+let _formScanCtx = null;   // {id, data} während eines Scans aus dem Formular
+function scanIntoForm(){
+  const cur = (typeof readForm==='function') ? readForm() : {};
+  _formScanCtx = { id: editingProductId, data: cur };
+  $('modal').innerHTML = `
+    <div class="modal-head"><h2>Barcode scannen</h2>
+      <button class="x" onclick="cancelFormScan()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body">
+      <div id="reader"></div>
+      <div class="scan-status" id="scanStatus">Kamera wird gestartet… (nur über HTTPS)</div>
+      <div style="display:flex;gap:9px;align-items:center;margin:6px 0 2px">
+        <button class="btn btn-ghost btn-sm" id="torchBtn" style="display:none" onclick="toggleTorch()">🔦 Aus</button>
+        <span style="font-size:12px;color:var(--txt3)">Barcode ruhig in den Rahmen halten.</span>
+      </div>
+      <div class="field full"><label>Oder EAN manuell eingeben</label>
+        <div style="display:flex;gap:9px">
+          <input id="manualEan" inputmode="numeric" placeholder="z.B. 5449000000996" style="flex:1;padding:10px 12px;background:var(--bg2);border:1px solid var(--line);border-radius:9px;color:var(--txt)">
+          <button class="btn btn-acc" onclick="formScanResult($('manualEan').value)">Übernehmen</button>
+        </div>
+      </div>
+    </div>`;
+  showModal();
+  scanHandled=false;
+  startCamForm();
+}
+async function startCamForm(){
+  if(typeof Html5Qrcode === 'undefined'){ setScanStatus('Scanner-Bibliothek nicht geladen — EAN manuell eingeben.'); return; }
+  setScanStatus('Kamera wird gestartet…');
+  try{ html5qr = new Html5Qrcode("reader", { formatsToSupport: retailFormats(), experimentalFeatures:{useBarCodeDetectorIfSupported:true}, verbose:false }); }
+  catch(e){ setScanStatus('Scanner-Init fehlgeschlagen — EAN manuell eingeben.'); return; }
+  let cam={ facingMode:"environment" };
+  try{ const cams=await Html5Qrcode.getCameras(); if(cams&&cams.length){ const bad=/front|user|wide|ultra|tele|depth|truedepth|ir\b/i; const back=cams.filter(c=>/back|rear|environment|rück|hinten/i.test(c.label||'')); const pick=back.find(c=>!bad.test(c.label||''))||back[0]||cams.find(c=>!bad.test(c.label||''))||cams[cams.length-1]; if(pick) cam={deviceId:{exact:pick.id}}; } }catch(e){}
+  const config={ fps:15, qrbox:(vw,vh)=>{const s=Math.floor(Math.min(vw,vh)*0.82);return {width:s,height:Math.floor(s*0.62)};}, aspectRatio:(window.innerHeight>window.innerWidth)?1.0:1.7777, videoConstraints:{ ...(cam.deviceId?{deviceId:cam.deviceId}:{facingMode:{ideal:"environment"}}), width:{ideal:1920}, height:{ideal:1080}, advanced:[{focusMode:"continuous"}] } };
+  html5qr.start(cam, config,
+    code=>{ if(scanHandled) return; scanHandled=true; try{navigator.vibrate&&navigator.vibrate(60);}catch(_){}
+            stopCam(); setScanStatus('Gescannt: '+code); formScanResult(code); },
+    ()=>{})
+    .then(()=>{ setScanStatus('Halte einen Barcode in den Rahmen…'); setupTorch(); })
+    .catch(e=>setScanStatus('Kamera nicht verfügbar — EAN manuell eingeben.'));
+}
+function cancelFormScan(){ stopCam(); const ctx=_formScanCtx; _formScanCtx=null; reopenProductForm(ctx, {}); }
+/* Scan-Ergebnis ins Formular übernehmen: EAN setzen, Name nur holen wenn leer. */
+async function formScanResult(ean){
+  ean=String(ean||'').trim(); stopCam();
+  const ctx=_formScanCtx; _formScanCtx=null;
+  if(!ean){ reopenProductForm(ctx, {}); return; }
+  // Schon ein anderes Produkt mit dieser EAN? -> Hinweis, aber Formular behalten.
+  const other = products.find(p=>p.ean===ean && p.id!==(ctx&&ctx.id));
+  reopenProductForm(ctx, { ean });
+  if(other) toast('Achtung: EAN gehört bereits zu „'+(other.name||'?')+'"');
+  // Name nachladen, wenn das Namensfeld leer ist.
+  const nameEmpty = !(ctx && ctx.data && (ctx.data.name||'').trim());
+  if(nameEmpty){ await fillNameFromEan(ean); }
+}
+/* „Name holen"-Button: nutzt die EAN, die schon im Feld steht. */
+async function lookupNameIntoForm(){
+  const ean=$('f_ean')?$('f_ean').value.trim():''; if(!ean){ toast('Erst eine EAN eingeben oder scannen'); return; }
+  await fillNameFromEan(ean, true);
+}
+/* Holt den Namen zur EAN (gemerkt -> OpenFoodFacts) und trägt ihn ins Namensfeld.
+   force=true überschreibt auch einen vorhandenen Namen (expliziter Button-Klick). */
+async function fillNameFromEan(ean, force){
+  const el=$('f_name'); if(!el) return;
+  if(el.value.trim()!=='' && !force){ return; }
+  const before=el.value; el.value=''; el.placeholder='Suche '+ean+' …';
+  let name=await getEanName(ean);
+  if(!name){ for(const base of OFF_DBS){ name=await offLookup(base, ean); if(name) break; } }
+  el.placeholder='z.B. Coca Cola';
+  if(name){ el.value=name; toast('Produkt erkannt'); }
+  else { el.value=before; toast('Kein Name gefunden — bitte selbst eintragen'); }
+}
+/* Öffnet die Produkt-Maske erneut mit zuvor eingegebenen Werten + Patches (z.B. neue EAN). */
+function reopenProductForm(ctx, patch){
+  const merged = Object.assign({}, ctx&&ctx.data?ctx.data:{}, patch||{});
+  if(ctx && ctx.id){
+    // Bestehendes Produkt: temporär die Formularwerte mergen, damit nichts verloren geht.
+    openProduct(ctx.id, merged);
+  } else {
+    openProduct(null, merged);
+  }
+}
+/* Aktiviert/deaktiviert den Lookup-Button je nachdem, ob eine EAN da ist. */
+function updateEanButtons(){
+  const ean=$('f_ean')?$('f_ean').value.trim():'';
+  const lb=$('eanLookupBtn'); if(lb) lb.classList.toggle('disabled', !ean);
 }
 
 /* =====================================================================
