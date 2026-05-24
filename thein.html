@@ -669,11 +669,12 @@ const num = v => { const n = parseFloat(String(v).replace(',','.')); return isNa
 const eur = v => num(v).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});
 const r2 = v => Math.round(num(v)*100)/100;
 const r4 = v => Math.round(num(v)*10000)/10000;
-/* Cent-genaue Summe: jede Position wird EINZELN auf Cent gerundet (Einzelpreis × Menge),
-   dann summiert. So ergibt „angezeigte Werte zusammengezählt" exakt die Summe —
-   nachvollziehbar wie in der Buchhaltung (kaufmännisch runden, dann addieren). */
+/* Nachvollziehbare Summe: erst den ANGEZEIGTEN Einzelpreis auf Cent runden
+   (genau die Zahl, die in der Tabelle steht), dann × Menge, dann summieren.
+   So ergibt „angezeigter Einzelpreis × Menge, alles zusammengezählt" exakt
+   die Summe — wie man es im Kopf nachrechnet. */
 function sumCent(rows, field){
-  return rows.reduce((s,w)=> s + r2(num(w[field]) * num(w.menge||1)), 0);
+  return rows.reduce((s,w)=> s + r2(w[field]) * num(w.menge||1), 0);
 }
 const esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function nextId(arr){ let m=0; arr.forEach(x=>{const n=parseInt(x.id);if(!isNaN(n)&&n>m)m=n}); return String(m+1); }
@@ -934,7 +935,7 @@ function renderDashboard(){
     </div>
 
     ${negativ?`<div class="dashnote bad">⚠ ${negativ} Produkt${negativ===1?'':'e'} mit negativem Gewinn — bitte Preis prüfen.</div>`:''}
-    ${unvollstaendig?`<div class="dashnote info" onclick="go('produkte','unvollstaendig')" style="cursor:pointer">ℹ ${unvollstaendig} Produkt${unvollstaendig===1?'':'e'} unvollständig${ohneEk?` · ${ohneEk} ohne EK-Preis`:''}${ohneMhd?` · ${ohneMhd} ohne MHD`:''} — zum Pflegen antippen.</div>`:''}
+    ${unvollstaendig?`<div class="dashnote info" onclick="go('produkte','unvollstaendig')" style="cursor:pointer">${unvollstaendig} Produkt${unvollstaendig===1?'':'e'} unvollständig${ohneEk?` · ${ohneEk} ohne EK-Preis`:''}${ohneMhd?` · ${ohneMhd} ohne MHD`:''} — zum Pflegen antippen.</div>`:''}
 
     <div class="dashcols">
       <div class="dashcard">
