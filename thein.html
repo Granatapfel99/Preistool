@@ -276,16 +276,32 @@ input,select,textarea{font-family:inherit;font-size:15px}
 
 /* ---------- Table (Warenverderb) ---------- */
 .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel)}
-table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:760px}
-th{text-align:left;padding:11px 13px;background:var(--bg2);color:var(--txt2);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--line);white-space:nowrap}
-td{padding:11px 13px;border-bottom:1px solid var(--line);vertical-align:top}
+table{border-collapse:collapse;width:100%;font-size:13px;table-layout:auto}
+th{text-align:left;padding:10px 10px;background:var(--bg2);color:var(--txt2);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid var(--line);white-space:nowrap}
+th.thwrap{white-space:normal}
+td{padding:10px 10px;border-bottom:1px solid var(--line);vertical-align:top}
 tr:last-child td{border-bottom:none}
 tbody tr:hover{background:var(--panel2)}
 .num{font-family:var(--mono);text-align:right;white-space:nowrap}
 .tdel{color:var(--txt3)}
 .tdel:hover{color:var(--warn)}
-/* Lange Textspalten umbrechen lassen -> weniger horizontales Scrollen */
-.tablewrap td.wrap{white-space:normal;min-width:160px;max-width:280px}
+/* Lange Textspalten umbrechen lassen -> kein erzwungenes horizontales Scrollen */
+.tablewrap td.wrap{white-space:normal;word-break:break-word;min-width:120px}
+.tablewrap col.c-name{width:22%} .tablewrap col.c-kom{width:18%}
+/* Jahr-Gruppen (Accordion) im Warenverderb */
+.yeargroup{border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);margin-bottom:12px;overflow:hidden}
+.yearhead{display:flex;align-items:center;gap:11px;width:100%;padding:14px 16px;background:var(--bg2);color:var(--txt);font-size:15px;font-weight:600;text-align:left;transition:.12s}
+.yearhead:hover{background:var(--panel2)}
+.ycaret{width:17px;height:17px;flex-shrink:0;transition:transform .15s;color:var(--txt2)}
+.yeargroup.open .ycaret{transform:rotate(90deg)}
+.ytitle{flex-shrink:0}
+.ymeta{margin-left:auto;font-size:12px;font-weight:400;color:var(--txt3);font-family:var(--mono);white-space:nowrap}
+.yearbody{padding:16px}
+.katmanage{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:var(--radius-sm);overflow:hidden}
+.katmanage-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--line)}
+.katmanage-row:last-child{border-bottom:none}
+.katmanage-name{flex:1;font-size:13.5px;font-weight:500}
+.katmanage-cnt{font-family:var(--mono);font-size:12px;color:var(--txt3)}
 
 /* ---------- Scanner ---------- */
 #reader{width:100%;border-radius:var(--radius);overflow:hidden;margin-bottom:14px;min-height:60px}
@@ -478,6 +494,48 @@ async function cloudReplaceAll(table,arr){
    Einmal pro Tag wird beim App-Start ein vollständiger Snapshot (Produkte,
    Verderb, Einstellungen) in der Cloud-Tabelle 'backups' abgelegt. Läuft
    unsichtbar, ohne Klick. Es werden die letzten ~30 Snapshots behalten. */
+/* ---------- Export-Backups je Jahr (Punkt 4) ----------
+   Beim Excel-Export wird die zuletzt exportierte Verderb-Version pro Jahr in
+   der Cloud gesichert (Tabelle 'export_backups', genau EINE Zeile je Jahr).
+   Erneuter Export desselben Jahres überschreibt die gespeicherte Version. */
+function exportKey(filterYear){ return filterYear==null ? 'gesamt' : String(filterYear); }
+async function saveExportSnapshot(filterYear, rows){
+  if(!USE_CLOUD) return;
+  try{
+    const key=exportKey(filterYear);
+    await sb.from('export_backups').upsert({
+      id:key, year:(filterYear==null?null:filterYear),
+      exported_at:new Date().toISOString(),
+      data:{ jahr:key, positionen:rows }
+    });
+  }catch(e){ /* still: darf den Export nie stören */ }
+}
+async function getExportSnapshot(filterYear){
+  if(!USE_CLOUD) return null;
+  try{ const {data}=await sb.from('export_backups').select('id,exported_at').eq('id',exportKey(filterYear)).maybeSingle(); return data||null; }
+  catch(e){ return null; }
+}
+/* Vor dem Export prüfen: existiert schon ein gespeicherter Export für dieses Jahr?
+   Wenn ja -> Hinweis-Modal (überschreiben/abbrechen). Sonst direkt exportieren. */
+async function requestExport(filterYear){
+  const existing = await getExportSnapshot(filterYear);
+  if(!existing){ exportVerderbXlsx(filterYear); return; }
+  const lbl = filterYear==null ? 'Gesamtlaufzeit' : ('Jahr '+filterYear);
+  const when = existing.exported_at ? new Date(existing.exported_at).toLocaleString('de-DE') : '';
+  $('modal').innerHTML = `
+    <div class="modal-head"><h2>Export überschreiben?</h2>
+      <button class="x" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body">
+      <p class="d" style="margin-top:0">Für <b>${esc(lbl)}</b> existiert bereits ein gespeicherter Export${when?` (vom ${esc(when)})`:''}.</p>
+      <p class="d">Der bisherige Backup-Export wird überschrieben. Fortfahren?</p>
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeModal()">Abbrechen</button>
+        <button class="btn btn-acc" style="flex:1;justify-content:center" onclick="closeModal();exportVerderbXlsx(${filterYear==null?'null':filterYear})">Überschreiben</button>
+      </div>
+    </div>`;
+  showModal();
+}
+
 async function autoBackupIfDue(){
   if(!USE_CLOUD) return;
   const today=new Date().toISOString().slice(0,10);
@@ -1230,71 +1288,120 @@ function duplicateIds(){
   Object.values(byName).forEach(ids=>{ if(ids.length>1) ids.forEach(id=>dupes.add(id)); });
   return dupes;
 }
-function renderVerderb(){
-  const rows = [...waste].sort((a,b)=>String(a.warenbezeichnung||'').localeCompare(String(b.warenbezeichnung||''),'de'));
-  const sumBrutto = rows.reduce((s,w)=>s+num(w.ek_brutto)*num(w.menge||1),0);
+/* Zustand: welche Jahr-Gruppen sind aufgeklappt (Accordion). Standard: aktuelles Jahr. */
+let verderbOpenYears = null;
+function ensureOpenYears(years){
+  if(verderbOpenYears) return;
+  verderbOpenYears = new Set();
+  const cur=new Date().getFullYear();
+  if(years.includes(cur)) verderbOpenYears.add(cur);
+  else if(years.length) verderbOpenYears.add(years[0]);   // sonst neuestes Jahr
+}
+function toggleVerderbYear(y){
+  y=parseInt(y);
+  if(verderbOpenYears.has(y)) verderbOpenYears.delete(y); else verderbOpenYears.add(y);
+  renderVerderb();
+}
+/* MHD-Jahr eines Produkts (für die Gruppierung der Ablauf-Überwachung). */
+function productMhdYear(p){ const s=String(p.mhd||'');const m=s.match(/(\d{4})/);return m?parseInt(m[1]):null; }
 
-  // Ablauf-Kandidaten aus den Produkten (abgelaufen + bald ablaufend), dringlichste zuerst.
+function renderVerderb(){
+  const allRows = [...waste].sort((a,b)=>String(a.warenbezeichnung||'').localeCompare(String(b.warenbezeichnung||''),'de'));
+  const sumBrutto = allRows.reduce((s,w)=>s+num(w.ek_brutto)*num(w.menge||1),0);
+
+  // Ablauf-Kandidaten aus den Produkten (abgelaufen + bald ablaufend).
   const kandidaten = products.map(p=>({p, st:mhdStatus(p)}))
     .filter(x=>x.st.key==='expired'||x.st.key==='today'||x.st.key==='soon')
     .sort((a,b)=>(a.st.t??0)-(b.st.t??0));
 
+  // Jahre über beide Bereiche sammeln (Tabelle + Ablauf-Kandidaten).
+  const yearSet=new Set();
+  allRows.forEach(w=>{ const y=wasteMhdYear(w); if(y) yearSet.add(y); });
+  kandidaten.forEach(({p})=>{ const y=productMhdYear(p); if(y) yearSet.add(y); });
+  const years=[...yearSet].sort((a,b)=>b-a);
+  ensureOpenYears(years);
+
+  // Gruppieren
+  const rowsByYear={}, kandByYear={};
+  allRows.forEach(w=>{ const y=wasteMhdYear(w)||'—'; (rowsByYear[y]=rowsByYear[y]||[]).push(w); });
+  kandidaten.forEach(k=>{ const y=productMhdYear(k.p)||'—'; (kandByYear[y]=kandByYear[y]||[]).push(k); });
+  // '—' (ohne Jahr) als eigene Gruppe ganz unten anhängen.
+  const groupYears=[...years]; if(rowsByYear['—']||kandByYear['—']) groupYears.push('—');
+
+  const expBadge = st => st.key==='expired'?`<span class="mhdb mhdb-exp">abgelaufen ${Math.abs(st.t)} T.</span>`
+                      : st.key==='today'?`<span class="mhdb mhdb-exp">läuft heute ab</span>`
+                      : `<span class="mhdb mhdb-soon">in ${st.t} T.</span>`;
+
+  const yearBlock = (y) => {
+    const open = y!=='—' && verderbOpenYears.has(parseInt(y));
+    const kand = kandByYear[y]||[];
+    const rws  = rowsByYear[y]||[];
+    const yBrutto = rws.reduce((s,w)=>s+num(w.ek_brutto)*num(w.menge||1),0);
+    return `
+    <div class="yeargroup ${open?'open':''}">
+      <button class="yearhead" onclick="toggleVerderbYear('${y}')">
+        <svg class="ycaret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 18l6-6-6-6"/></svg>
+        <span class="ytitle">${y==='—'?'Ohne MHD-Jahr':y}</span>
+        <span class="ymeta">${rws.length} Pos.${kand.length?` · ${kand.length} ablaufend`:''} · ${eur(yBrutto)} €</span>
+      </button>
+      <div class="yearbody" ${open?'':'hidden'}>
+        ${kand.length?`
+        <div class="setcard" style="max-width:none;margin:0 0 14px;border-color:var(--warn)">
+          <h3 style="display:flex;align-items:center;gap:8px;font-size:15px">⚠ Ablauf-Überwachung <span style="font-size:12px;color:var(--txt3);font-weight:400">${kand.length} Artikel · Vorwarnung ${warnDays()} Tage</span></h3>
+          <p class="d">Du entscheidest pro Artikel. Aktionsware bleibt in „Produkte" und zählt <b>nicht</b> als Verderb.</p>
+          <div class="explist">
+            ${kand.map(({p,st})=>{
+              const c=rechnePreis(p);
+              const aktionHint=(p.aktionspreis!=null&&p.aktionspreis!=='')?`<span class="mhdb mhdb-act">Aktion ${eur(p.aktionspreis)} €</span>`:'';
+              return `<div class="exprow">
+                <div class="exprow-main">
+                  <div class="exprow-name">${esc(p.name||'(ohne Name)')}</div>
+                  <div class="exprow-sub">MHD ${fmtDate(p.mhd)} ${expBadge(st)} ${aktionHint} · EK ${eur(c.ekBrutto)} €</div>
+                </div>
+                <div class="exprow-acts">
+                  <button class="btn btn-ghost btn-sm" onclick="aktionFor('${p.id}')" title="Aktionspreis setzen — bleibt in Produkten">Aktion</button>
+                  <button class="btn btn-ghost btn-sm" onclick="privatFor('${p.id}')" title="Als private Entnahme buchen">Privat</button>
+                  <button class="btn btn-danger btn-sm" onclick="verderbFor('${p.id}')" title="Als Warenverderb buchen">Verderb</button>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>`:''}
+        ${rws.length?`<div class="tablewrap"><table>
+          <colgroup><col><col class="c-name"><col><col><col><col><col><col><col><col class="c-kom"><col></colgroup>
+          <thead><tr><th>Grund</th><th>Warenbezeichnung</th><th>Menge</th><th>Einzelpreis</th><th class="thwrap">MwSt. [%]</th><th>MHD</th><th class="thwrap">Einkaufspreis Brutto</th><th class="thwrap">Einkaufspreis Netto</th><th class="thwrap">privat entnommene Menge</th><th>Kommentar</th><th></th></tr></thead>
+          <tbody>${rws.map(w=>`<tr onclick="openVerderb('${w.id}')" style="cursor:pointer">
+            <td>${grundBadge(w.grund||w.typ)}</td>
+            <td class="wrap">${esc(w.warenbezeichnung)}</td>
+            <td class="num">${esc(w.menge||'')}</td>
+            <td class="num">${w.einzelpreis!=null&&w.einzelpreis!==''?eur(w.einzelpreis)+' €':'—'}</td>
+            <td class="num">${w.mwst!=null&&w.mwst!==''?w.mwst:'—'}</td>
+            <td>${esc(w.mhd||'—')}</td>
+            <td class="num">${w.ek_brutto!=null&&w.ek_brutto!==''?eur(w.ek_brutto)+' €':'—'}</td>
+            <td class="num">${w.ek_netto!=null&&w.ek_netto!==''?eur(w.ek_netto)+' €':'—'}</td>
+            <td class="num">${esc(w.private_entnahme||'—')}</td>
+            <td class="wrap">${esc(w.kommentar||'')}</td>
+            <td class="tdel num" onclick="event.stopPropagation();delVerderb('${w.id}')">✕</td>
+          </tr>`).join('')}</tbody></table></div>`:`<p class="d" style="margin:4px 2px">Keine gebuchten Positionen in diesem Jahr.</p>`}
+      </div>
+    </div>`;
+  };
+
   $('content').innerHTML = `
     <div class="page-head">
-      <div><h1>Warenverderb</h1><div class="sub">${rows.length} gebuchte Positionen · Verderb-Wert (EK brutto) ${eur(sumBrutto)} €</div></div>
+      <div><h1>Warenverderb</h1><div class="sub">${allRows.length} gebuchte Positionen · Verderb-Wert (EK brutto) ${eur(sumBrutto)} €</div></div>
       <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap">
         <select class="selstyle" id="exportYear" title="Zeitraum für den Export (nach MHD-Jahr)">
           <option value="">Gesamtlaufzeit</option>
-          ${wasteYears().map(y=>`<option value="${y}">Jahr ${y}</option>`).join('')}
+          ${years.map(y=>`<option value="${y}">Jahr ${y}</option>`).join('')}
         </select>
-        <button class="btn btn-ghost" onclick="exportVerderbXlsx($('exportYear').value===''?null:parseInt($('exportYear').value))"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Excel</button>
+        <button class="btn btn-ghost" onclick="requestExport($('exportYear').value===''?null:parseInt($('exportYear').value))"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Excel</button>
         <button class="btn btn-acc" onclick="openVerderb(null)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>Position</button>
       </div>
     </div>
-
-    ${kandidaten.length?`
-    <div class="setcard" style="max-width:none;margin-bottom:18px;border-color:var(--warn)">
-      <h3 style="display:flex;align-items:center;gap:8px">⚠ Ablauf-Überwachung <span style="font-size:12px;color:var(--txt3);font-weight:400">${kandidaten.length} Artikel betroffen · Vorwarnung ${warnDays()} Tage</span></h3>
-      <p class="d">Du entscheidest pro Artikel. Aktionsware bleibt in „Produkte" und zählt <b>nicht</b> als Verderb. Erst „Als Verderb buchen" oder „Private Entnahme" erfasst hier eine Position.</p>
-      <div class="explist">
-        ${kandidaten.map(({p,st})=>{
-          const c=rechnePreis(p);
-          const badge = st.key==='expired'?`<span class="mhdb mhdb-exp">abgelaufen ${Math.abs(st.t)} T.</span>`
-                      : st.key==='today'?`<span class="mhdb mhdb-exp">läuft heute ab</span>`
-                      : `<span class="mhdb mhdb-soon">in ${st.t} T.</span>`;
-          const aktionHint = (p.aktionspreis!=null&&p.aktionspreis!=='')?`<span class="mhdb mhdb-act">Aktion ${eur(p.aktionspreis)} €</span>`:'';
-          return `<div class="exprow">
-            <div class="exprow-main">
-              <div class="exprow-name">${esc(p.name||'(ohne Name)')}</div>
-              <div class="exprow-sub">MHD ${fmtDate(p.mhd)} ${badge} ${aktionHint} · EK ${eur(c.ekBrutto)} €</div>
-            </div>
-            <div class="exprow-acts">
-              <button class="btn btn-ghost btn-sm" onclick="aktionFor('${p.id}')" title="Aktionspreis setzen — bleibt in Produkten">Aktion</button>
-              <button class="btn btn-ghost btn-sm" onclick="privatFor('${p.id}')" title="Als private Entnahme buchen">Privat</button>
-              <button class="btn btn-danger btn-sm" onclick="verderbFor('${p.id}')" title="Als Warenverderb buchen">Verderb</button>
-            </div>
-          </div>`;
-        }).join('')}
-      </div>
-    </div>`:''}
-
-    <div style="font-family:var(--mono);font-size:12.5px;color:var(--txt2);margin-bottom:14px">${esc(settings.inhaber_name)} · ${esc(settings.inhaber_email)} · ${new Date().getFullYear()} – Warenverderb</div>
-    ${rows.length?`<div class="tablewrap"><table>
-      <thead><tr><th>Grund</th><th>Warenbezeichnung</th><th>Menge</th><th>Einzelpreis</th><th>MwSt. [%]</th><th>MHD</th><th>Einkaufspreis Brutto</th><th>Einkaufspreis Netto</th><th>privat entnommene Menge</th><th>Kommentar</th><th></th></tr></thead>
-      <tbody>${rows.map(w=>`<tr onclick="openVerderb('${w.id}')" style="cursor:pointer">
-        <td>${grundBadge(w.grund||w.typ)}</td>
-        <td class="wrap">${esc(w.warenbezeichnung)}</td>
-        <td class="num">${esc(w.menge||'')}</td>
-        <td class="num">${w.einzelpreis!=null&&w.einzelpreis!==''?eur(w.einzelpreis)+' €':'—'}</td>
-        <td class="num">${w.mwst!=null&&w.mwst!==''?w.mwst:'—'}</td>
-        <td>${esc(w.mhd||'—')}</td>
-        <td class="num">${w.ek_brutto!=null&&w.ek_brutto!==''?eur(w.ek_brutto)+' €':'—'}</td>
-        <td class="num">${w.ek_netto!=null&&w.ek_netto!==''?eur(w.ek_netto)+' €':'—'}</td>
-        <td class="num">${esc(w.private_entnahme||'—')}</td>
-        <td class="wrap">${esc(w.kommentar||'')}</td>
-        <td class="tdel num" onclick="event.stopPropagation();delVerderb('${w.id}')">✕</td>
-      </tr>`).join('')}</tbody></table></div>`
-      :`<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg><div>Noch keine Verderb-Positionen gebucht.</div></div>`}
+    <div style="font-family:var(--mono);font-size:12.5px;color:var(--txt2);margin-bottom:14px">${esc(settings.inhaber_name)} · ${esc(settings.inhaber_email)} · Warenverderb</div>
+    ${groupYears.length ? groupYears.map(yearBlock).join('')
+      : `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg><div>Noch keine Verderb-Positionen gebucht.</div></div>`}
   `;
 }
 function grundBadge(g){
@@ -1524,21 +1631,35 @@ function exportVerderbXlsx(filterYear){
 
   const ws = XLSX.utils.aoa_to_sheet(aoa, {cellDates:true});
   // Spaltenbreiten (an Vorlage angelehnt).
-  ws['!cols']=[{wch:20},{wch:42},{wch:8},{wch:13},{wch:10},{wch:12},{wch:21},{wch:20},{wch:24},{wch:30}];
-  // Zell-Formate setzen: Währung (D,G,H), Ganzzahl (C,E), Datum (F).
+  ws['!cols']=[{wch:20},{wch:42},{wch:8},{wch:13},{wch:10},{wch:13},{wch:21},{wch:20},{wch:24},{wch:30}];
   const EUR='#,##0.00\\ "€"';
-  for(let r=headRows; r<aoa.length; r++){
-    const set=(col,fmt)=>{ const ref=XLSX.utils.encode_cell({r, c:col}); const cell=ws[ref]; if(cell && cell.v!=='' && cell.v!=null){ cell.z=fmt; } };
-    set(3, EUR);   // Einzelpreis
-    set(6, EUR);   // EK Brutto
-    set(7, EUR);   // EK Netto
-    const dref=XLSX.utils.encode_cell({r, c:5}); const dcell=ws[dref];   // MHD
-    if(dcell && dcell.t==='d'){ dcell.z='dd.mm.yyyy'; }
+  const PCT='0\\ "%"';                     // 19 -> "19 %" (Wert bleibt Zahl, kein Excel-Ratespiel)
+  const NUMCOLS=new Set([2,3,4,6,7]);      // Menge, Einzelpreis, MwSt, EK Brutto, EK Netto
+  const lastCol=9, lastRow=aoa.length-1;
+  for(let r=headRows; r<=lastRow; r++){
+    for(let c=0;c<=lastCol;c++){
+      const ref=XLSX.utils.encode_cell({r,c}); const cell=ws[ref]; if(!cell) continue;
+      if(c===3||c===6||c===7) cell.z=EUR;                 // Währungsspalten
+      else if(c===4) cell.z=PCT;                          // MwSt als Prozent
+      else if(c===5 && cell.t==='d') cell.z='dd.mm.yyyy'; // MHD als Datum
+      cell.s = { alignment:{ horizontal: NUMCOLS.has(c)?'center':'left', vertical:'center' } };
+    }
   }
+  // Kopfzeile der Tabelle: fett, zentriert, umbrechbar.
+  for(let c=0;c<=lastCol;c++){
+    const ref=XLSX.utils.encode_cell({r:headRows-1,c}); const cell=ws[ref]; if(!cell) continue;
+    cell.s = { font:{bold:true}, alignment:{horizontal:'center', vertical:'center', wrapText:true} };
+  }
+  // Echte Excel-Tabelle mit AutoFilter + fixierte Kopfzeile.
+  ws['!autofilter']={ ref:`${XLSX.utils.encode_cell({r:headRows-1,c:0})}:${XLSX.utils.encode_cell({r:lastRow,c:lastCol})}` };
+  ws['!freeze']={ xSplit:0, ySplit:headRows };
+
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Warenverderb '+jahrLabel);
   const fname = filterYear==null ? 'warenverderb_gesamt.xlsx' : 'warenverderb_'+filterYear+'.xlsx';
-  XLSX.writeFile(wb, fname);
+  XLSX.writeFile(wb, fname, {cellDates:true});
+  // Punkt 4: zuletzt exportierte Version pro Jahr in der Cloud sichern.
+  saveExportSnapshot(filterYear, rows);
   toast('Excel exportiert ('+jahrLabel+')');
 }
 
@@ -1578,7 +1699,7 @@ function renderDaten(){
       <div style="display:flex;gap:9px;flex-wrap:wrap">
         <button class="btn btn-acc" onclick="exportWebJson()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Webseiten-JSON</button>
         <button class="btn btn-ghost" onclick="exportBackup()">Voll-Backup</button>
-        <button class="btn btn-ghost" onclick="exportVerderbXlsx(null)">Verderb-Excel</button>
+        <button class="btn btn-ghost" onclick="requestExport(null)">Verderb-Excel</button>
       </div>
     </div>`;
 }
@@ -1818,6 +1939,32 @@ function download(name,content,type){
 /* =====================================================================
    EINSTELLUNGEN
    ===================================================================== */
+/* Zählt, wie oft jede Kategorie in den Produkten vorkommt. */
+function categoryUsage(){
+  const u={}; products.forEach(p=>{ const k=(p.kategorie||'').trim(); if(k) u[k]=(u[k]||0)+1; }); return u;
+}
+/* Kategorie aus allen Produkten entfernen (Feld leeren). Mit Bestätigung. */
+function removeCategory(kat){
+  const used=categoryUsage(); const n=used[kat]||0;
+  $('modal').innerHTML = `
+    <div class="modal-head"><h2>Kategorie entfernen?</h2>
+      <button class="x" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body">
+      <p class="d" style="margin-top:0">Die Kategorie <b>${esc(kat)}</b> wird bei <b>${n}</b> Produkt${n===1?'':'en'} entfernt. Die Produkte selbst bleiben erhalten — nur die Kategorie-Zuordnung wird gelöscht.</p>
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeModal()">Abbrechen</button>
+        <button class="btn btn-danger" style="flex:1;justify-content:center" onclick="confirmRemoveCategory('${esc(kat).replace(/'/g,"\\'")}')">Entfernen</button>
+      </div>
+    </div>`;
+  showModal();
+}
+async function confirmRemoveCategory(kat){
+  const changed=[];
+  products.forEach(p=>{ if((p.kategorie||'').trim()===kat){ p.kategorie=''; p._updated=new Date().toISOString(); changed.push(p); } });
+  persist(); closeModal(); render();
+  if(USE_CLOUD){ try{ for(const p of changed) await cloudUpsert('products', p); toast('Kategorie entfernt'); }catch(e){ toast('Lokal entfernt (Cloud-Fehler)'); } }
+  else toast('Kategorie entfernt');
+}
 function renderEinstellungen(){
   $('content').innerHTML = `
     <div class="page-head"><div><h1>Einstellungen</h1><div class="sub">Standardwerte für die Preis-Engine &amp; Stammdaten</div></div></div>
@@ -1834,6 +1981,13 @@ function renderEinstellungen(){
         <div class="field"><label>Name</label><input id="s_name" value="${esc(settings.inhaber_name)}"></div>
         <div class="field"><label>E-Mail</label><input id="s_mail" value="${esc(settings.inhaber_email)}"></div>
       </div>
+      <h3 style="margin-top:22px">Kategorien</h3>
+      <p class="d" style="margin-bottom:10px">Kategorien entstehen automatisch durch die Produkte. Hier kannst du eine Kategorie aus allen Produkten entfernen. Nicht mehr genutzte verschwinden von selbst.</p>
+      ${(()=>{ const used=categoryUsage(); const keys=Object.keys(used).sort((a,b)=>a.localeCompare(b,'de'));
+        return keys.length
+          ? `<div class="katmanage">${keys.map(k=>`<div class="katmanage-row"><span class="katmanage-name">${esc(k)}</span><span class="katmanage-cnt">${used[k]}×</span><button class="qa-btn qa-del" title="Kategorie aus allen Produkten entfernen" onclick="removeCategory('${esc(k).replace(/'/g,"\\'")}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div>`).join('')}</div>`
+          : `<p class="d">Noch keine Kategorien vergeben.</p>`;
+      })()}
       <h3 style="margin-top:22px">Darstellung</h3>
       <div class="field full"><div class="inline-toggle"><label class="switch"><input type="checkbox" id="s_dark" ${settings.theme==='dark'?'checked':''} onchange="toggleTheme()"><span class="slider"></span></label><span>Dark Mode</span></div></div>
       ${USE_CLOUD?`<h3 style="margin-top:22px">Automatische Backups</h3>
