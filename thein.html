@@ -302,6 +302,23 @@ tbody tr:hover{background:var(--panel2)}
 .katmanage-row:last-child{border-bottom:none}
 .katmanage-name{flex:1;font-size:13.5px;font-weight:500}
 .katmanage-cnt{font-family:var(--mono);font-size:12px;color:var(--txt3)}
+/* ---------- Multi-Select ---------- */
+.selbar{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;margin-bottom:12px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-sm)}
+.selall{display:flex;align-items:center;gap:9px;font-size:13.5px;cursor:pointer;color:var(--txt2)}
+.selall input{width:17px;height:17px;accent-color:var(--acc)}
+.selcount{font-size:13px;color:var(--txt3);font-family:var(--mono)}
+.sel-card,.sel-row{position:relative;cursor:pointer}
+.sel-card .sel-check,.sel-row .sel-check{flex-shrink:0;width:24px;height:24px;border-radius:7px;border:2px solid var(--line2);display:flex;align-items:center;justify-content:center;color:#08130a;transition:.1s}
+.sel-card .sel-check{position:absolute;top:12px;right:12px;background:var(--bg2)}
+.sel-row{display:flex;align-items:center;gap:12px}
+.sel-row .sel-check{background:var(--bg2)}
+.sel-on{border-color:var(--acc)!important;box-shadow:inset 0 0 0 1px var(--acc)}
+.sel-on .sel-check{background:var(--acc);border-color:var(--acc)}
+.sel-check svg{width:15px;height:15px}
+.bulkbar{position:fixed;bottom:84px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line2);border-radius:14px;box-shadow:0 12px 36px rgba(0,0,0,.5);padding:11px 14px;display:flex;align-items:center;gap:14px;z-index:150;max-width:94vw;flex-wrap:wrap;justify-content:center}
+.bulk-count{font-size:13px;font-weight:600;color:var(--acc);font-family:var(--mono);white-space:nowrap}
+.bulk-actions{display:flex;gap:7px;flex-wrap:wrap}
+@media(max-width:600px){ .bulkbar{bottom:78px;width:94vw} .bulk-actions{flex:1;justify-content:space-between} }
 /* ---------- Dashboard ---------- */
 .dashgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
 .dashkpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;transition:.12s}
@@ -649,6 +666,8 @@ let settings = {...DEFAULTS};
 let view = 'dashboard';
 let search = '';
 let filter = { automat:false, abweichung:false, dupes:false, unvollstaendig:false, kat:'' };
+let selectMode = false;
+let selectedIds = new Set();
 let html5qr = null;
 let torchTrack = null;
 let scanHandled = false;            // verhindert Doppel-Auslösung beim Scan
@@ -864,6 +883,7 @@ function go(v, setFilter){
    ===================================================================== */
 function render(){
   renderNav();
+  if(view!=='produkte' && selectMode){ selectMode=false; selectedIds.clear(); }
   $('fabwrap').style.display = view==='produkte' ? 'flex' : 'none';
   $('content').classList.toggle('wide', view==='verderb');   // Warenverderb nutzt volle Breite
   if(view==='dashboard') renderDashboard();
@@ -872,6 +892,7 @@ function render(){
   else if(view==='daten') renderDaten();
   else if(view==='einstellungen') renderEinstellungen();
   updateFoot();
+  renderBulkBar();
 }
 function updateFoot(){ const f=$('foot'); if(f) f.textContent = `${products.length} Produkte · ${waste.length} Verderb · ${SYNC_LABEL[syncState]||syncState}`; }
 function setSync(s){ syncState=s; updateFoot(); }
@@ -980,6 +1001,7 @@ function renderProdukte(){
     <div class="page-head">
       <div><h1>Produkte</h1><div class="sub">${products.length} gepflegt · ${abw} unter Vorschlag${dupes.size?` · <span style="color:var(--warn)">${dupes.size} Duplikate</span>`:''}</div></div>
       <div style="display:flex;gap:9px">
+        <button class="btn ${selectMode?'btn-acc':'btn-ghost'}" onclick="toggleSelectMode()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>${selectMode?'Fertig':'Auswählen'}</button>
         <button class="btn btn-ghost" onclick="openScanner()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M4 12h16"/></svg>Scannen</button>
         <button class="btn btn-acc" onclick="openProduct(null)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>Neu</button>
       </div>
@@ -1027,9 +1049,14 @@ function renderItems(list, dupes){
   if(!list.length){
     return `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg><div>${products.length? 'Keine Treffer.' : 'Noch keine Produkte. Lege eins an oder importiere deine JSON unter „Import / Export".'}</div></div>`;
   }
-  return viewMode==='list'
+  const selBar = selectMode ? `<div class="selbar">
+      <label class="selall"><input type="checkbox" ${list.every(p=>selectedIds.has(p.id))&&list.length?'checked':''} onchange="toggleSelectAll(this.checked)"> Alle ${list.length} auswählen</label>
+      <span class="selcount">${selectedIds.size} ausgewählt</span>
+    </div>` : '';
+  const items = viewMode==='list'
     ? `<div class="plist">${list.map(p=>rowHtml(p,dupes.has(p.id))).join('')}</div>`
     : `<div class="grid">${list.map(p=>cardHtml(p,dupes.has(p.id))).join('')}</div>`;
+  return selBar + items;
 }
 function lightRenderProducts(){ const d=duplicateIds(); const c=$('prodList'); if(c) c.innerHTML = renderItems(getVisibleProducts(d), d); }
 function setViewMode(m){ if(viewMode===m) return; viewMode=m; saveViewPrefs(); $('vGrid')&&$('vGrid').classList.toggle('on',m==='grid'); $('vList')&&$('vList').classList.toggle('on',m==='list'); lightRenderProducts(); }
@@ -1038,6 +1065,15 @@ function cardHtml(p, isDupe){
   const c = rechnePreis(p);
   const st = mhdStatus(p);
   const mhdHtml = p.mhd ? `<span class="${st.key==='soon'||st.key==='today'||st.key==='expired'?'mhd-soon':''}">MHD ${new Date(p.mhd).toLocaleDateString('de-DE')}</span>` : '';
+  const sel = selectedIds.has(p.id);
+  if(selectMode){
+    return `<div class="card sel-card${sel?' sel-on':''}" onclick="toggleSelect('${p.id}')">
+      <div class="sel-check">${sel?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>':''}</div>
+      <div class="card-top"><div><h3 class="card-name">${esc(p.name||'(ohne Name)')}</h3><div class="card-kat">${esc(p.kategorie||'—')}</div></div></div>
+      <div class="card-price">${eur(c.verkauf)}<span class="eur">€</span></div>
+      <div class="card-meta">${mhdHtml}<span>EK ${eur(c.ekBrutto)} €</span></div>
+    </div>`;
+  }
   return `<div class="card${isDupe?' is-dupe':''}" onclick="openProduct('${p.id}')">
     <div class="quickacts" onclick="event.stopPropagation()">
       <button class="qa-btn" title="Duplizieren" onclick="dupProduct('${p.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
@@ -1058,6 +1094,14 @@ function cardHtml(p, isDupe){
 function rowHtml(p, isDupe){
   const c = rechnePreis(p);
   const st = mhdStatus(p);
+  const sel = selectedIds.has(p.id);
+  if(selectMode){
+    return `<div class="prow sel-row${sel?' sel-on':''}" onclick="toggleSelect('${p.id}')">
+      <div class="sel-check">${sel?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>':''}</div>
+      <div class="prow-main"><div class="prow-name">${esc(p.name||'(ohne Name)')}</div><div class="prow-sub">${esc(p.kategorie||'—')}</div></div>
+      <div class="prow-price">${eur(c.verkauf)} €</div>
+    </div>`;
+  }
   return `<div class="prow${isDupe?' is-dupe':''}" onclick="openProduct('${p.id}')">
     <div class="prow-main">
       <div class="prow-name">${esc(p.name||'(ohne Name)')}${isDupe?' <span class="dupe-tag">Duplikat</span>':''}</div>
@@ -1072,6 +1116,114 @@ function rowHtml(p, isDupe){
   </div>`;
 }
 function toggleFilter(k){ filter[k]=!filter[k]; render(); }
+/* ---------- Multi-Select / Bulk-Aktionen ---------- */
+function toggleSelectMode(){ selectMode=!selectMode; selectedIds.clear(); render(); renderBulkBar(); }
+function toggleSelect(id){
+  if(selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
+  lightRenderProducts(); renderBulkBar();
+}
+function toggleSelectAll(on){
+  const vis=getVisibleProducts();
+  if(on) vis.forEach(p=>selectedIds.add(p.id)); else vis.forEach(p=>selectedIds.delete(p.id));
+  lightRenderProducts(); renderBulkBar();
+}
+/* Schwebende Aktionsleiste unten — nur sichtbar, wenn etwas ausgewählt ist. */
+function renderBulkBar(){
+  let bar=$('bulkBar');
+  if(!selectMode || selectedIds.size===0){ if(bar) bar.remove(); return; }
+  if(!bar){ bar=document.createElement('div'); bar.id='bulkBar'; bar.className='bulkbar'; document.body.appendChild(bar); }
+  bar.innerHTML = `
+    <span class="bulk-count">${selectedIds.size} ausgewählt</span>
+    <div class="bulk-actions">
+      <button class="btn btn-ghost btn-sm" onclick="bulkCategory()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9h18M9 21V9M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/></svg>Kategorie</button>
+      <button class="btn btn-ghost btn-sm" onclick="bulkMarge()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Marge</button>
+      <button class="btn btn-ghost btn-sm" onclick="bulkMwst()">MwSt</button>
+      <button class="btn btn-ghost btn-sm" onclick="bulkDuplicate()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Duplizieren</button>
+      <button class="btn btn-danger btn-sm" onclick="bulkDelete()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Löschen</button>
+    </div>`;
+}
+function selectedProducts(){ return products.filter(p=>selectedIds.has(p.id)); }
+async function applyBulk(changeFn, msg){
+  const sel=selectedProducts(); if(!sel.length) return;
+  sel.forEach(p=>{ changeFn(p); p._updated=new Date().toISOString(); });
+  persist(); render(); renderBulkBar();
+  if(USE_CLOUD){ try{ for(const p of sel) await cloudUpsert('products', p); toast(msg); }catch(e){ toast('Lokal gespeichert (Cloud-Fehler)'); } }
+  else toast(msg);
+}
+function bulkCategory(){
+  const opts=allCategories();
+  $('modal').innerHTML = `
+    <div class="modal-head"><h2>Kategorie zuweisen</h2><button class="x" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body">
+      <p class="d" style="margin-top:0">${selectedIds.size} Produkte bekommen diese Kategorie:</p>
+      <div class="field full"><input id="bulkKat" list="bulkKatList" placeholder="Kategorie tippen oder wählen…" autofocus>
+        <datalist id="bulkKatList">${opts.map(k=>`<option value="${esc(k)}">`).join('')}</datalist></div>
+      <div style="display:flex;gap:10px;margin-top:18px">
+        <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeModal()">Abbrechen</button>
+        <button class="btn btn-acc" style="flex:1;justify-content:center" onclick="doBulkCategory()">Zuweisen</button>
+      </div>
+    </div>`;
+  showModal(); setTimeout(()=>$('bulkKat')&&$('bulkKat').focus(),50);
+}
+function doBulkCategory(){ const k=$('bulkKat')?$('bulkKat').value.trim():''; closeModal(); applyBulk(p=>p.kategorie=k, 'Kategorie gesetzt'); }
+function bulkMarge(){
+  $('modal').innerHTML = `
+    <div class="modal-head"><h2>Soll-Marge setzen</h2><button class="x" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body">
+      <p class="d" style="margin-top:0">${selectedIds.size} Produkte bekommen diese Soll-Marge (Aufschlag auf EK):</p>
+      <div class="field full"><label>Soll-Marge (%)</label><input id="bulkMargeVal" inputmode="decimal" value="${settings.default_marge}" autofocus></div>
+      <div style="display:flex;gap:10px;margin-top:18px">
+        <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeModal()">Abbrechen</button>
+        <button class="btn btn-acc" style="flex:1;justify-content:center" onclick="doBulkMarge()">Setzen</button>
+      </div>
+    </div>`;
+  showModal(); setTimeout(()=>{const e=$('bulkMargeVal'); if(e){e.focus();e.select();}},50);
+}
+function doBulkMarge(){ const v=num($('bulkMargeVal').value); closeModal(); applyBulk(p=>p.marge_soll=v, 'Marge gesetzt'); }
+function bulkMwst(){
+  $('modal').innerHTML = `
+    <div class="modal-head"><h2>MwSt-Satz setzen</h2><button class="x" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body">
+      <p class="d" style="margin-top:0">${selectedIds.size} Produkte bekommen diesen MwSt-Satz:</p>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="doBulkMwst(7)">7 %</button>
+        <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="doBulkMwst(19)">19 %</button>
+      </div>
+      <button class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:10px" onclick="closeModal()">Abbrechen</button>
+    </div>`;
+  showModal();
+}
+function doBulkMwst(v){ closeModal(); applyBulk(p=>p.mwst_ek=v, 'MwSt gesetzt'); }
+function bulkDuplicate(){
+  const sel=selectedProducts(); if(!sel.length) return;
+  const copies=sel.map(p=>({...p, id:uid(), name:(p.name||'')+' (Kopie)', _updated:new Date().toISOString()}));
+  copies.forEach(c=>products.push(c)); persist(); selectedIds.clear(); render(); renderBulkBar();
+  if(USE_CLOUD){ (async()=>{ try{ for(const c of copies) await cloudUpsert('products', c); toast(copies.length+' dupliziert'); }catch(e){ toast('Lokal dupliziert (Cloud-Fehler)'); } })(); }
+  else toast(copies.length+' dupliziert');
+}
+function bulkDelete(){
+  const n=selectedIds.size; if(!n) return;
+  $('modal').innerHTML = `
+    <div class="modal-head"><h2>${n} Produkte löschen?</h2><button class="x" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body">
+      <p class="d" style="margin-top:0"><b>${n} Produkt${n===1?'':'e'}</b> werden endgültig gelöscht${USE_CLOUD?' — auf allen Geräten':''}. Rückgängig per „Rückgängig" direkt danach möglich.</p>
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeModal()">Abbrechen</button>
+        <button class="btn btn-danger" style="flex:1;justify-content:center" onclick="doBulkDelete()">Löschen</button>
+      </div>
+    </div>`;
+  showModal();
+}
+function doBulkDelete(){
+  const removed=selectedProducts(); const ids=new Set(removed.map(p=>p.id));
+  products=products.filter(p=>!ids.has(p.id)); persist(); selectedIds.clear(); closeModal(); render(); renderBulkBar();
+  if(USE_CLOUD){ (async()=>{ for(const p of removed){ try{ await cloudDelete('products', p.id); }catch(e){} } })(); }
+  toastUndo(removed.length+' gelöscht', ()=>{
+    removed.forEach(p=>products.push(p)); persist(); render();
+    if(USE_CLOUD){ (async()=>{ for(const p of removed){ try{ await cloudUpsert('products', p); }catch(e){} } })(); }
+    toast('Wiederhergestellt');
+  });
+}
 /* Produkt duplizieren — neue ID, Name + " (Kopie)", sofort sichtbar. */
 function dupProduct(id){
   const p=products.find(x=>x.id===id); if(!p) return;
@@ -1087,7 +1239,7 @@ function openProduct(id, prefill){
   const p = Object.assign({}, base||{}, prefill||{});   // prefill überschreibt (für Reopen nach Scan)
   editingProductId = id || null;
   const isNew = !id;
-  const kats = [...new Set(products.map(x=>x.kategorie).filter(Boolean))].sort();
+  const kats = allCategories();
   const g = (k,d='')=> p[k]!=null ? p[k] : d;
   $('modal').innerHTML = `
     <div class="modal-head">
@@ -2261,7 +2413,50 @@ function download(name,content,type){
    ===================================================================== */
 /* Zählt, wie oft jede Kategorie in den Produkten vorkommt. */
 function categoryUsage(){
-  const u={}; products.forEach(p=>{ const k=(p.kategorie||'').trim(); if(k) u[k]=(u[k]||0)+1; }); return u;
+  const u={}; products.forEach(p=>{ const k=(p.kategorie||'').trim(); if(k) u[k]=(u[k]||0)+1; });
+  (settings.extra_kats||[]).forEach(k=>{ if(k && u[k]==null) u[k]=0; });   // angelegte, noch ungenutzte
+  return u;
+}
+/* Alle Kategorien (aus Produkten + angelegte), alphabetisch — für Auswahllisten. */
+function allCategories(){
+  const s=new Set(products.map(p=>(p.kategorie||'').trim()).filter(Boolean));
+  (settings.extra_kats||[]).forEach(k=>{ if(k) s.add(k); });
+  return [...s].sort((a,b)=>a.localeCompare(b,'de'));
+}
+/* Neue Kategorie anlegen (wird in settings.extra_kats gemerkt, bis ein Produkt sie nutzt). */
+function addCategory(){
+  const inp=$('newKat'); if(!inp) return;
+  const name=inp.value.trim(); if(!name){ toast('Bitte einen Namen eingeben'); return; }
+  const exists=Object.keys(categoryUsage()).some(k=>norm(k)===norm(name));
+  if(exists){ toast('Kategorie existiert bereits'); return; }
+  settings.extra_kats=[...(settings.extra_kats||[]), name];
+  saveSettingsObj(); render();
+  toast('Kategorie angelegt');
+}
+/* Kategorie umbenennen — bei allen Produkten + in extra_kats. */
+function renameCategory(kat){
+  $('modal').innerHTML = `
+    <div class="modal-head"><h2>Kategorie umbenennen</h2>
+      <button class="x" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body">
+      <div class="field full"><label>Neuer Name für „${esc(kat)}"</label><input id="renameKat" value="${esc(kat)}" autofocus></div>
+      <div style="display:flex;gap:10px;margin-top:18px">
+        <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeModal()">Abbrechen</button>
+        <button class="btn btn-acc" style="flex:1;justify-content:center" onclick="confirmRenameCategory('${esc(kat).replace(/'/g,"\\'")}')">Umbenennen</button>
+      </div>
+    </div>`;
+  showModal(); setTimeout(()=>{const e=$('renameKat'); if(e){e.focus();e.select();}},50);
+}
+async function confirmRenameCategory(oldKat){
+  const neu=$('renameKat')?$('renameKat').value.trim():''; if(!neu){ toast('Bitte einen Namen eingeben'); return; }
+  if(neu===oldKat){ closeModal(); return; }
+  const changed=[];
+  products.forEach(p=>{ if((p.kategorie||'').trim()===oldKat){ p.kategorie=neu; p._updated=new Date().toISOString(); changed.push(p); } });
+  // extra_kats mitziehen
+  if(settings.extra_kats){ settings.extra_kats=settings.extra_kats.map(k=>k===oldKat?neu:k).filter((k,i,a)=>a.indexOf(k)===i); }
+  persist(); saveSettingsObj(); closeModal(); render();
+  if(USE_CLOUD){ try{ for(const p of changed) await cloudUpsert('products', p); toast('Umbenannt — '+changed.length+' Produkt'+(changed.length===1?'':'e')); }catch(e){ toast('Lokal umbenannt (Cloud-Fehler)'); } }
+  else toast('Umbenannt');
 }
 /* Kategorie aus allen Produkten entfernen (Feld leeren). Mit Bestätigung. */
 function removeCategory(kat){
@@ -2281,7 +2476,8 @@ function removeCategory(kat){
 async function confirmRemoveCategory(kat){
   const changed=[];
   products.forEach(p=>{ if((p.kategorie||'').trim()===kat){ p.kategorie=''; p._updated=new Date().toISOString(); changed.push(p); } });
-  persist(); closeModal(); render();
+  if(settings.extra_kats){ settings.extra_kats=settings.extra_kats.filter(k=>k!==kat); }
+  persist(); saveSettingsObj(); closeModal(); render();
   if(USE_CLOUD){ try{ for(const p of changed) await cloudUpsert('products', p); toast('Kategorie entfernt'); }catch(e){ toast('Lokal entfernt (Cloud-Fehler)'); } }
   else toast('Kategorie entfernt');
 }
@@ -2302,12 +2498,17 @@ function renderEinstellungen(){
         <div class="field"><label>E-Mail</label><input id="s_mail" value="${esc(settings.inhaber_email)}"></div>
       </div>
       <h3 style="margin-top:22px">Kategorien</h3>
-      <p class="d" style="margin-bottom:10px">Kategorien entstehen automatisch durch die Produkte. Hier kannst du eine Kategorie aus allen Produkten entfernen. Nicht mehr genutzte verschwinden von selbst.</p>
+      <p class="d" style="margin-bottom:10px">Kategorien umbenennen (wirkt auf alle Produkte mit dieser Kategorie), neu anlegen oder entfernen. Produkte bleiben dabei immer erhalten.</p>
+      <div style="display:flex;gap:9px;margin-bottom:12px">
+        <input id="newKat" placeholder="Neue Kategorie…" style="flex:1;padding:10px 12px;background:var(--bg2);border:1px solid var(--line);border-radius:9px;color:var(--txt)" onkeydown="if(event.key==='Enter')addCategory()">
+        <button class="btn btn-acc" onclick="addCategory()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>Anlegen</button>
+      </div>
       ${(()=>{ const used=categoryUsage(); const keys=Object.keys(used).sort((a,b)=>a.localeCompare(b,'de'));
         return keys.length
-          ? `<div class="katmanage">${keys.map(k=>`<div class="katmanage-row"><span class="katmanage-name">${esc(k)}</span><span class="katmanage-cnt">${used[k]}×</span><button class="qa-btn qa-del" title="Kategorie aus allen Produkten entfernen" onclick="removeCategory('${esc(k).replace(/'/g,"\\'")}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div>`).join('')}</div>`
-          : `<p class="d">Noch keine Kategorien vergeben.</p>`;
+          ? `<div class="katmanage">${keys.map(k=>{const ek=esc(k).replace(/'/g,"\\'");return `<div class="katmanage-row"><span class="katmanage-name">${esc(k)}</span><span class="katmanage-cnt">${used[k]}×</span><button class="qa-btn" title="Umbenennen" onclick="renameCategory('${ek}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="qa-btn qa-del" title="Kategorie aus allen Produkten entfernen" onclick="removeCategory('${ek}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div>`;}).join('')}</div>`
+          : `<p class="d">Noch keine Kategorien vergeben. Lege oben eine an oder vergib sie direkt beim Produkt.</p>`;
       })()}
+      ${(()=>{ const extra=(settings.extra_kats||[]).filter(k=>!categoryUsage()[k]); return extra.length?`<p class="d" style="margin-top:8px">Angelegt, noch ungenutzt: ${extra.map(k=>esc(k)).join(', ')}</p>`:''; })()}
       <h3 style="margin-top:22px">Darstellung</h3>
       <div class="field full"><div class="inline-toggle"><label class="switch"><input type="checkbox" id="s_dark" ${settings.theme==='dark'?'checked':''} onchange="toggleTheme()"><span class="slider"></span></label><span>Dark Mode</span></div></div>
       ${USE_CLOUD?`<h3 style="margin-top:22px">Automatische Backups</h3>
@@ -2349,6 +2550,12 @@ function confirmRestore(id, lbl){
         <button class="btn btn-danger" style="flex:1;justify-content:center" onclick="restoreBackup('${id}')">Wiederherstellen</button>
       </div>
     </div>`;
+}
+/* Speichert das settings-Objekt (lokal + Cloud), ohne das Formular zu lesen.
+   Für Aktionen wie Kategorie anlegen/umbenennen, die settings direkt ändern. */
+function saveSettingsObj(){
+  localSet('thein_settings', settings);
+  if(USE_CLOUD){ const biz={...settings}; delete biz.theme; sb.from('settings').upsert({id:1, data:biz}).catch(()=>{}); }
 }
 function saveSettings(){
   settings.default_marge=num($('s_marge').value);
