@@ -2448,13 +2448,16 @@ function allCategories(){
   return [...s].sort((a,b)=>a.localeCompare(b,'de'));
 }
 /* Neue Kategorie anlegen (wird in settings.extra_kats gemerkt, bis ein Produkt sie nutzt). */
-function addCategory(){
+async function addCategory(){
   const inp=$('newKat'); if(!inp) return;
   const name=inp.value.trim(); if(!name){ toast('Bitte einen Namen eingeben'); return; }
   const exists=Object.keys(categoryUsage()).some(k=>norm(k)===norm(name));
   if(exists){ toast('Kategorie existiert bereits'); return; }
   settings.extra_kats=[...(settings.extra_kats||[]), name];
-  saveSettingsObj(); render();
+  inp.value='';
+  render();                          // sofort sichtbar
+  await saveSettingsObjAsync();      // Cloud-Write abschließen, BEVOR ein Sync zurückspielen kann
+  render();                          // final mit garantiertem Stand
   toast('Kategorie angelegt');
 }
 /* Index-basierte Wrapper (vermeiden Escaping-Probleme bei Sonderzeichen wie & , ' ). */
