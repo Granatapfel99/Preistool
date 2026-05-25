@@ -297,6 +297,13 @@ tbody tr:hover{background:var(--panel2)}
 .ytitle{flex-shrink:0}
 .ymeta{margin-left:auto;font-size:12px;font-weight:400;color:var(--txt3);font-family:var(--mono);white-space:nowrap}
 .yearbody{padding:16px}
+.verderb-search{position:relative;display:flex;align-items:center;margin-bottom:14px}
+.verderb-search>svg{position:absolute;left:13px;width:18px;height:18px;color:var(--txt3);pointer-events:none}
+.verderb-search input{width:100%;padding:11px 40px 11px 40px;background:var(--panel);border:1px solid var(--line);border-radius:11px;color:var(--txt);font-size:14px}
+.verderb-search input:focus{border-color:var(--acc);outline:none}
+.vs-clear{position:absolute;right:8px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;color:var(--txt3);border-radius:7px}
+.vs-clear:hover{color:var(--txt);background:var(--panel2)}
+.vs-clear svg{width:16px;height:16px}
 .katmanage{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:var(--radius-sm);overflow:hidden}
 .katmanage-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--line)}
 .katmanage-row:last-child{border-bottom:none}
@@ -896,6 +903,7 @@ function go(v, setFilter){
 function render(){
   renderNav();
   if(view!=='produkte' && selectMode){ selectMode=false; selectedIds.clear(); }
+  if(view!=='verderb' && verderbSearch){ verderbSearch=''; }
   $('fabwrap').style.display = view==='produkte' ? 'flex' : 'none';
   $('content').classList.toggle('wide', view==='verderb');   // Warenverderb nutzt volle Breite
   if(view==='dashboard') renderDashboard();
@@ -1729,6 +1737,7 @@ function duplicateIds(){
 }
 /* Zustand: welche Jahr-Gruppen sind aufgeklappt (Accordion). Standard: aktuelles Jahr. */
 let verderbOpenYears = null;
+let verderbSearch = '';
 function ensureOpenYears(years){
   if(verderbOpenYears) return;
   verderbOpenYears = new Set();
@@ -1745,7 +1754,9 @@ function toggleVerderbYear(y){
 function productMhdYear(p){ const s=String(p.mhd||'');const m=s.match(/(\d{4})/);return m?parseInt(m[1]):null; }
 
 function renderVerderb(){
-  const allRows = [...waste].sort((a,b)=>String(a.warenbezeichnung||'').localeCompare(String(b.warenbezeichnung||''),'de'));
+  const q = norm(verderbSearch);
+  const matchRow = w => !q || norm(w.warenbezeichnung).includes(q) || norm(w.grund||w.typ).includes(q) || norm(w.kommentar).includes(q);
+  const allRows = [...waste].filter(matchRow).sort((a,b)=>String(a.warenbezeichnung||'').localeCompare(String(b.warenbezeichnung||''),'de'));
   const sumBrutto = sumCent(allRows, 'ek_brutto');
   const sumNetto  = sumCent(allRows, 'ek_netto');
 
@@ -1766,15 +1777,17 @@ function renderVerderb(){
   allRows.forEach(w=>{ const y=wasteMhdYear(w)||'—'; (rowsByYear[y]=rowsByYear[y]||[]).push(w); });
   kandidaten.forEach(k=>{ const y=productMhdYear(k.p)||'—'; (kandByYear[y]=kandByYear[y]||[]).push(k); });
   // '—' (ohne Jahr) als eigene Gruppe ganz unten anhängen.
-  const groupYears=[...years]; if(rowsByYear['—']||kandByYear['—']) groupYears.push('—');
+  let groupYears=[...years]; if(rowsByYear['—']||kandByYear['—']) groupYears.push('—');
+  // Bei aktiver Suche nur Jahre mit Tabellen-Treffern zeigen (Ablauf-Block ist suchneutral).
+  if(q) groupYears = groupYears.filter(y => (rowsByYear[y]||[]).length);
 
   const expBadge = st => st.key==='expired'?`<span class="mhdb mhdb-exp">abgelaufen ${Math.abs(st.t)} T.</span>`
                       : st.key==='today'?`<span class="mhdb mhdb-exp">läuft heute ab</span>`
                       : `<span class="mhdb mhdb-soon">in ${st.t} T.</span>`;
 
   const yearBlock = (y) => {
-    const open = y!=='—' && verderbOpenYears.has(parseInt(y));
-    const kand = kandByYear[y]||[];
+    const open = q ? true : (y!=='—' && verderbOpenYears.has(parseInt(y)));   // bei Suche alle Treffer-Jahre offen
+    const kand = q ? [] : (kandByYear[y]||[]);   // Ablauf-Überwachung bei Suche ausblenden (suchneutral)
     const rws  = rowsByYear[y]||[];
     const yBrutto = sumCent(rws, 'ek_brutto');
     const yNetto  = sumCent(rws, 'ek_netto');
@@ -1841,9 +1854,20 @@ function renderVerderb(){
       </div>
     </div>
     <div style="font-family:var(--mono);font-size:12.5px;color:var(--txt2);margin-bottom:14px">${esc(settings.inhaber_name)} · ${esc(settings.inhaber_email)} · Warenverderb</div>
+    ${waste.length?`<div class="verderb-search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input id="verderbSearch" placeholder="Verderb durchsuchen (Name, Grund, Kommentar)…" value="${esc(verderbSearch)}" oninput="onVerderbSearch(this.value)">
+      ${verderbSearch?`<button class="vs-clear" onclick="onVerderbSearch('')" title="Suche löschen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>`:''}
+    </div>`:''}
     ${groupYears.length ? groupYears.map(yearBlock).join('')
-      : `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg><div>Noch keine Verderb-Positionen gebucht.</div></div>`}
+      : (q ? `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><div>Keine Verderb-Position passt zu „${esc(verderbSearch)}".</div></div>`
+            : `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg><div>Noch keine Verderb-Positionen gebucht.</div></div>`)}
   `;
+}
+/* Suche im Warenverderb — Fokus/Cursor erhalten, nur neu rendern. */
+function onVerderbSearch(v){
+  verderbSearch=v; renderVerderb();
+  const el=$('verderbSearch'); if(el){ el.focus(); const n=el.value.length; try{el.setSelectionRange(n,n);}catch(e){} }
 }
 function grundBadge(g){
   const v=g||'MHD';
@@ -2129,7 +2153,8 @@ function exportVerderbXlsx(filterYear){
   ws['!cols']=[{wch:20},{wch:42},{wch:8},{wch:13},{wch:10},{wch:13},{wch:21},{wch:20},{wch:24},{wch:30}];
   const EUR='#,##0.00\\ "€"';
   const PCT='0\\ "%"';                     // 19 -> "19 %" (Wert bleibt Zahl, kein Excel-Ratespiel)
-  const NUMCOLS=new Set([2,3,4,6,7]);      // Menge, Einzelpreis, MwSt, EK Brutto, EK Netto
+  // Zentriert: Grund (0) + alle Zahl-/Datumsspalten. Linksbündig: Warenbezeichnung (1) & Kommentar (9).
+  const CENTERCOLS=new Set([0,2,3,4,5,6,7,8]);
   const lastCol=9, lastRow=aoa.length-1;
   for(let r=headRows; r<=lastRow; r++){
     for(let c=0;c<=lastCol;c++){
@@ -2137,7 +2162,7 @@ function exportVerderbXlsx(filterYear){
       if(c===3||c===6||c===7) cell.z=EUR;                 // Währungsspalten
       else if(c===4) cell.z=PCT;                          // MwSt als Prozent
       else if(c===5 && cell.t==='d') cell.z='dd.mm.yyyy'; // MHD als Datum
-      cell.s = { alignment:{ horizontal: NUMCOLS.has(c)?'center':'left', vertical:'center' } };
+      cell.s = { alignment:{ horizontal: CENTERCOLS.has(c)?'center':'left', vertical:'center' } };
     }
   }
   // Kopfzeile der Tabelle: fett, zentriert, umbrechbar.
@@ -2484,12 +2509,16 @@ async function confirmRenameCategory(){
   if(neu===oldKat){ closeModal(); return; }
   const changed=[];
   products.forEach(p=>{ if((p.kategorie||'').trim()===oldKat){ p.kategorie=neu; p._updated=new Date().toISOString(); changed.push(p); } });
+  const wasExtra = (settings.extra_kats||[]).includes(oldKat);
   if(settings.extra_kats){ settings.extra_kats=settings.extra_kats.map(k=>k===oldKat?neu:k).filter((k,i,a)=>a.indexOf(k)===i); }
   persist(); closeModal(); render();
-  if(USE_CLOUD){
-    try{ for(const p of changed) await cloudUpsert('products', p); await saveSettingsObjAsync(); toast('Umbenannt — '+changed.length+' Produkt'+(changed.length===1?'':'e')); render(); }
-    catch(e){ toast('Lokal umbenannt (Cloud-Fehler)'); }
-  } else { saveSettingsObj(); toast('Umbenannt'); }
+  const finishCloud = async()=>{ if(USE_CLOUD){ try{ for(const p of changed) await cloudUpsert('products', p); await saveSettingsObjAsync(); render(); }catch(e){} } else saveSettingsObj(); };
+  await finishCloud();
+  toastUndo('Umbenannt in „'+neu+'"', async()=>{
+    changed.forEach(p=>{ p.kategorie=oldKat; p._updated=new Date().toISOString(); });
+    if(settings.extra_kats){ settings.extra_kats=settings.extra_kats.map(k=>k===neu?oldKat:k).filter((k,i,a)=>a.indexOf(k)===i); }
+    persist(); render(); await finishCloud(); toast('Wiederhergestellt');
+  });
 }
 /* Kategorie aus allen Produkten entfernen (Feld leeren) + aus extra_kats. Mit Bestätigung. */
 function removeCategory(kat){
@@ -2511,12 +2540,16 @@ async function confirmRemoveCategory(){
   const kat=_catTarget;
   const changed=[];
   products.forEach(p=>{ if((p.kategorie||'').trim()===kat){ p.kategorie=''; p._updated=new Date().toISOString(); changed.push(p); } });
+  const wasExtra = (settings.extra_kats||[]).includes(kat);
   if(settings.extra_kats){ settings.extra_kats=settings.extra_kats.filter(k=>k!==kat); }
   persist(); closeModal(); render();
-  if(USE_CLOUD){
-    try{ for(const p of changed) await cloudUpsert('products', p); await saveSettingsObjAsync(); toast('Kategorie entfernt'); render(); }
-    catch(e){ toast('Lokal entfernt (Cloud-Fehler)'); }
-  } else { saveSettingsObj(); toast('Kategorie entfernt'); }
+  const finishCloud = async()=>{ if(USE_CLOUD){ try{ for(const p of changed) await cloudUpsert('products', p); await saveSettingsObjAsync(); render(); }catch(e){} } else saveSettingsObj(); };
+  await finishCloud();
+  toastUndo('Kategorie „'+kat+'" entfernt', async()=>{
+    changed.forEach(p=>{ p.kategorie=kat; p._updated=new Date().toISOString(); });
+    if(wasExtra && !(settings.extra_kats||[]).includes(kat)){ settings.extra_kats=[...(settings.extra_kats||[]), kat]; }
+    persist(); render(); await finishCloud(); toast('Wiederhergestellt');
+  });
 }
 function renderEinstellungen(){
   $('content').innerHTML = `
