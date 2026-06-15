@@ -1421,20 +1421,31 @@ function saveProduct(id){
   if(!data.mhd){ toast('Bitte MHD eintragen (Pflichtfeld)'); const e=$('f_mhd'); if(e){ e.focus(); try{e.showPicker&&e.showPicker();}catch(_){}} return; }
   // Schutz vor Daten-Verlust: Wenn ein Produkt mit abgelaufenem/heute ablaufendem MHD
   // ein NEUES MHD bekommt, frage zuerst, was mit der alten Charge passiert ist.
-  // Ohne diese Abfrage würde die alte abgelaufene Charge stillschweigend aus der
-  // Ablauf-Überwachung verschwinden und wäre für den Steuerberater nicht mehr dokumentiert.
+  // Beide MHDs auf ein Standardformat normalisieren (YYYY-MM-DD), damit der Vergleich
+  // nicht durch reine Formatunterschiede ausgelöst wird.
   if(id){
     const old = products.find(x=>x.id===id);
-    if(old && old.mhd && data.mhd && old.mhd !== data.mhd){
-      const st = mhdStatus(old);
-      if(st.key==='expired' || st.key==='today'){
-        _mhdChangeCtx = { id, oldMhd: old.mhd, oldStatus: st, newData: data };
-        showMhdChangeDialog();
-        return;     // Speichern wird durch den Dialog gesteuert
+    if(old && old.mhd && data.mhd){
+      const a = mhdISO(old.mhd), b = mhdISO(data.mhd);
+      if(a && b && a !== b){
+        const st = mhdStatus(old);
+        if(st.key==='expired' || st.key==='today'){
+          _mhdChangeCtx = { id, oldMhd: old.mhd, oldStatus: st, newData: data };
+          showMhdChangeDialog();
+          return;
+        }
       }
     }
   }
   doSaveProduct(id, data);
+}
+/* Normalisiert ein MHD (TT.MM.JJJJ oder ISO) auf YYYY-MM-DD für stabilen Vergleich. */
+function mhdISO(s){
+  s=String(s||'').trim(); if(!s) return '';
+  let m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); if(m) return m[1]+'-'+m[2]+'-'+m[3];
+  m=s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+  if(m){ const dd=m[1].padStart(2,'0'), mm=m[2].padStart(2,'0'); return m[3]+'-'+mm+'-'+dd; }
+  return '';
 }
 /* Eigentliches Speichern — herausgezogen, damit der MHD-Schutz-Dialog es aufrufen kann. */
 function doSaveProduct(id, data){
