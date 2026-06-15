@@ -691,6 +691,7 @@ let torchTrack = null;
 let scanHandled = false;            // verhindert Doppel-Auslösung beim Scan
 let editingProductId = null;        // aktuell in der Maske bearbeitetes Produkt (für In-Form-Scan)
 let _catTarget = null;              // Kategorie, die gerade umbenannt/entfernt wird
+let _mhdChangeCtx = null;           // Kontext für MHD-Change-Schutz-Dialog
 let syncState = USE_CLOUD ? 'connecting' : 'lokal';
 let rtChannel = null, reloadTimer = null;
 const SYNC_LABEL = { lokal:'lokal', connecting:'verbinde…', live:'● live', reconnecting:'reconnect…', offline:'offline' };
@@ -1418,6 +1419,25 @@ function saveProduct(id){
   const data = readForm();
   if(!data.name){ toast('Bitte einen Namen eingeben'); const e=$('f_name'); if(e)e.focus(); return; }
   if(!data.mhd){ toast('Bitte MHD eintragen (Pflichtfeld)'); const e=$('f_mhd'); if(e){ e.focus(); try{e.showPicker&&e.showPicker();}catch(_){}} return; }
+  // Schutz vor Daten-Verlust: Wenn ein Produkt mit abgelaufenem/heute ablaufendem MHD
+  // ein NEUES MHD bekommt, frage zuerst, was mit der alten Charge passiert ist.
+  // Ohne diese Abfrage würde die alte abgelaufene Charge stillschweigend aus der
+  // Ablauf-Überwachung verschwinden und wäre für den Steuerberater nicht mehr dokumentiert.
+  if(id){
+    const old = products.find(x=>x.id===id);
+    if(old && old.mhd && data.mhd && old.mhd !== data.mhd){
+      const st = mhdStatus(old);
+      if(st.key==='expired' || st.key==='today'){
+        _mhdChangeCtx = { id, oldMhd: old.mhd, oldStatus: st, newData: data };
+        showMhdChangeDialog();
+        return;     // Speichern wird durch den Dialog gesteuert
+      }
+    }
+  }
+  doSaveProduct(id, data);
+}
+/* Eigentliches Speichern — herausgezogen, damit der MHD-Schutz-Dialog es aufrufen kann. */
+function doSaveProduct(id, data){
   data._updated = new Date().toISOString();   // für „zuletzt geändert"-Sortierung
   let saved;
   if(id){ const i=products.findIndex(x=>x.id===id); saved = products[i] = {...products[i], ...data}; }
@@ -1429,6 +1449,51 @@ function saveProduct(id){
                    catch(e){ toast('Lokal gespeichert (Cloud-Fehler)'); } }
     else toast(id?'Gespeichert':'Produkt angelegt');
   })();
+}
+/* Dialog: Was ist mit der alten (abgelaufenen) Charge passiert? */
+function showMhdChangeDialog(){
+  const ctx=_mhdChangeCtx; if(!ctx) return;
+  const days = Math.abs(ctx.oldStatus.t||0);
+  const expText = ctx.oldStatus.key==='expired' ? `vor ${days} Tag${days===1?'':'en'} abgelaufen` : 'läuft heute ab';
+  $('modal').innerHTML = `
+    <div class="modal-head"><h2>Alte Charge — was tun?</h2>
+      <button class="x" onclick="cancelMhdChange()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body">
+      <p class="d" style="margin-top:0">Das alte MHD <b>${esc(fmtDate(ctx.oldMhd))}</b> war <b>${esc(expText)}</b>. Du trägst gerade ein neues MHD <b>${esc(fmtDate(ctx.newData.mhd))}</b> ein — vermutlich neue Ware.</p>
+      <p class="d">Damit die alte Charge für den Steuerberater nicht stillschweigend verschwindet, sag bitte kurz, was damit passiert ist:</p>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
+        <button class="btn btn-danger" style="justify-content:flex-start;text-align:left" onclick="mhdChangeBookWaste()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg><span><b>Als Verderb buchen</b> — alte Charge verdorben</span></button>
+        <button class="btn btn-ghost" style="justify-content:flex-start;text-align:left" onclick="mhdChangeSoldOrPrivate()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M20 6 9 17l-5-5"/></svg><span><b>Verkauft / Privatentnahme</b> — alte Charge ist raus</span></button>
+        <button class="btn btn-ghost" style="justify-content:flex-start;text-align:left;opacity:.75" onclick="mhdChangeForce()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg><span><b>Trotzdem überschreiben</b> — ohne Verderb-Eintrag</span></button>
+      </div>
+    </div>`;
+  showModal();
+}
+function cancelMhdChange(){ _mhdChangeCtx=null; closeModal(); }
+/* „Als Verderb buchen" — alte Charge mit altem MHD als Verderb verbuchen, dann neues MHD speichern. */
+function mhdChangeBookWaste(){
+  const ctx=_mhdChangeCtx; if(!ctx) return;
+  const prod = products.find(x=>x.id===ctx.id); if(!prod) return;
+  // Snapshot des Produkts mit ALTEM MHD für die Verderb-Buchung erzeugen.
+  const oldSnapshot = {...prod, mhd: ctx.oldMhd};
+  bookWaste(oldSnapshot, 'MHD');                       // legt Verderb-Position mit altem MHD an
+  doSaveProduct(ctx.id, ctx.newData);                   // dann das Produkt mit neuem MHD speichern
+  _mhdChangeCtx=null;
+  toast('Alte Charge als Verderb gebucht');
+}
+/* „Verkauft / Privat" — keine Verderb-Buchung, einfach speichern. */
+function mhdChangeSoldOrPrivate(){
+  const ctx=_mhdChangeCtx; if(!ctx) return;
+  doSaveProduct(ctx.id, ctx.newData);
+  _mhdChangeCtx=null;
+  toast('MHD aktualisiert');
+}
+/* „Trotzdem überschreiben" — bewusst ohne Verderb-Eintrag (mit Hinweis). */
+function mhdChangeForce(){
+  const ctx=_mhdChangeCtx; if(!ctx) return;
+  doSaveProduct(ctx.id, ctx.newData);
+  _mhdChangeCtx=null;
+  toast('Überschrieben — keine Verderb-Doku angelegt');
 }
 function delProduct(id){
   const p=products.find(x=>x.id===id);
