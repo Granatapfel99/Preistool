@@ -865,7 +865,7 @@ function rechnePreis(p){
 }
 
 /* ---------- MHD-Helfer ---------- */
-function mhdTage(mhd){ if(!mhd) return null; const d=new Date(mhd); if(isNaN(d))return null; return Math.ceil((d - new Date())/86400000); }
+function mhdTage(mhd){ if(!mhd) return null; const iso=mhdISO(mhd); const d=new Date(iso||mhd); if(isNaN(d))return null; return Math.ceil((d - new Date())/86400000); }
 /* MHD-Status für Ampel/Logik. warnDays aus Settings (Default 7). */
 function warnDays(){ const n=num(settings.mhd_warn_tage); return n>0?n:7; }
 function mhdStatus(p){
@@ -1323,7 +1323,7 @@ function openProduct(id, prefill){
       <fieldset class="fieldset" style="border:none;padding:0;margin:0 0 20px"><legend>Verkauf & Status</legend><div class="fgrid">
         <div class="field"><label>Preisschild (€) <span class="hint">leer = Vorschlag</span></label><input id="f_schild" type="text" inputmode="decimal" value="${g('preisschild','')}" oninput="liveCalc()"></div>
         <div class="field"><label>Aktionspreis (€) <span class="hint">optional</span></label><input id="f_aktion" type="text" inputmode="decimal" value="${g('aktionspreis','')}" oninput="liveCalc()"></div>
-        <div class="field"><label>MHD <span class="req">*Pflicht</span></label><input id="f_mhd" type="date" value="${g('mhd','')}"></div>
+        <div class="field"><label>MHD <span class="req">*Pflicht</span></label><input id="f_mhd" type="date" value="${mhdISO(g('mhd',''))}"></div>
         <div class="field"><label>Beliebtheit</label><select id="f_bel"><option ${g('beliebtheit','keine Angabe')==='keine Angabe'?'selected':''}>keine Angabe</option><option ${g('beliebtheit')==='niedrig'?'selected':''}>niedrig</option><option ${g('beliebtheit')==='mittel'?'selected':''}>mittel</option><option ${g('beliebtheit')==='hoch'?'selected':''}>hoch</option></select></div>
       </div></fieldset>
 
@@ -1359,7 +1359,7 @@ function readForm(){
     pfand_typ:$('f_pfandtyp')?$('f_pfandtyp').value.trim():'',
     preisschild:$('f_schild').value.trim()===''?'':num($('f_schild').value),
     aktionspreis:$('f_aktion').value.trim()===''?'':num($('f_aktion').value),
-    mhd:$('f_mhd').value, beliebtheit:$('f_bel').value,
+    mhd:mhdISO($('f_mhd').value)||$('f_mhd').value, beliebtheit:$('f_bel').value,
     gebinde_aktiv:$('f_geb')?$('f_geb').checked:false,
     gebinde_preis:$('f_gebpreis')&&$('f_gebpreis').value.trim()!==''?num($('f_gebpreis').value):'',
     gebinde_stueck:$('f_gebstk')&&$('f_gebstk').value.trim()!==''?num($('f_gebstk').value):''
@@ -1418,7 +1418,7 @@ function filterKatChips(){
 function saveProduct(id){
   const data = readForm();
   if(!data.name){ toast('Bitte einen Namen eingeben'); const e=$('f_name'); if(e)e.focus(); return; }
-  if(!data.mhd){ toast('Bitte MHD eintragen (Pflichtfeld)'); const e=$('f_mhd'); if(e){ e.focus(); try{e.showPicker&&e.showPicker();}catch(_){}} return; }
+  if(!data.mhd){ toast('Bitte MHD eintragen (Pflichtfeld)'); const e=$('f_mhd'); if(e){ try{ e.focus(); }catch(_){ } setTimeout(()=>{ try{ if(e.showPicker) e.showPicker(); }catch(_){ } }, 0); } return; }
   // Schutz vor Daten-Verlust: Wenn ein Produkt mit abgelaufenem/heute ablaufendem MHD
   // ein NEUES MHD bekommt, frage zuerst, was mit der alten Charge passiert ist.
   // Beide MHDs auf ein Standardformat normalisieren (YYYY-MM-DD), damit der Vergleich
