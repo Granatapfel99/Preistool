@@ -1451,65 +1451,62 @@ function doSaveProduct(id, data){
   })();
 }
 /* Dialog: Was ist mit der alten (abgelaufenen) Charge passiert?
-   Volle Auswahl wie im Warenverderb — ein Tap = Aktion + Grund in einem. */
+   Stil = Warenverderb-Formular: Grund-Chips wählen, dann Aktion. Alles vorausgefüllt. */
 function showMhdChangeDialog(){
   const ctx=_mhdChangeCtx; if(!ctx) return;
   const days = Math.abs(ctx.oldStatus.t||0);
   const expText = ctx.oldStatus.key==='expired' ? `vor ${days} Tag${days===1?'':'en'} abgelaufen` : 'läuft heute ab';
-  // Verderb-Gründe (außer Privatentnahme, die hat eine eigene Aktion).
-  const verderbGruende = VERDERB_KATS.filter(k=>k!=='Privatentnahme');
+  _mhdChangeGrund = 'MHD';     // sinnvolle Standardauswahl
   $('modal').innerHTML = `
     <div class="modal-head"><h2>Alte Charge — was tun?</h2>
       <button class="x" onclick="cancelMhdChange()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     <div class="modal-body">
-      <p class="d" style="margin-top:0">Altes MHD <b>${esc(fmtDate(ctx.oldMhd))}</b> war <b>${esc(expText)}</b>. Du trägst gerade ein neues MHD <b>${esc(fmtDate(ctx.newData.mhd))}</b> ein.</p>
-      <p class="d" style="margin-bottom:8px">Was ist mit der alten Charge passiert?</p>
-      <div class="mhd-section-label">Als Verderb buchen — Grund wählen:</div>
-      <div class="mhd-grundgrid">
-        ${verderbGruende.map(k=>`<button type="button" class="mhd-grund-btn" onclick="mhdChangeBookWaste('${esc(k).replace(/'/g,"\\'")}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>${esc(k)}</button>`).join('')}
+      <p class="d" style="margin-top:0">Altes MHD <b>${esc(fmtDate(ctx.oldMhd))}</b> war <b>${esc(expText)}</b>. Neues MHD <b>${esc(fmtDate(ctx.newData.mhd))}</b>.</p>
+      <div class="field full" style="margin-top:14px">
+        <label>Grund</label>
+        <div class="grundchips" id="mhdGrundChips">
+          ${VERDERB_KATS.map(k=>`<button type="button" class="grundchip ${k===_mhdChangeGrund?'on':''}" onclick="pickMhdGrund(this,'${esc(k).replace(/'/g,"\\'")}')">${esc(k)}</button>`).join('')}
+        </div>
       </div>
-      <div class="mhd-section-label" style="margin-top:14px">Oder kein Verderb:</div>
-      <div class="mhd-altgrid">
-        <button type="button" class="mhd-alt-btn" onclick="mhdChangePrivat()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Privatentnahme buchen</button>
-        <button type="button" class="mhd-alt-btn" onclick="mhdChangeSoldOrPrivate()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>Verkauft / nichts buchen</button>
-        <button type="button" class="mhd-alt-btn mhd-force" onclick="mhdChangeForce()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>Trotzdem überschreiben</button>
+      <div class="modal-btnrow" style="margin-top:18px">
+        <button class="btn btn-ghost" onclick="mhdChangeSoldOrPrivate()">Verkauft / nichts buchen</button>
+        <button class="btn btn-acc" onclick="mhdChangeBookSelected()">Buchen</button>
       </div>
+      <button class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:8px;opacity:.7" onclick="mhdChangeForce()">Trotzdem überschreiben — ohne Eintrag</button>
     </div>`;
   showModal();
 }
-function cancelMhdChange(){ _mhdChangeCtx=null; closeModal(); }
-/* „Als Verderb buchen" — mit dem getappten Grund. Snapshot trägt das ALTE MHD. */
-function mhdChangeBookWaste(grund){
-  const ctx=_mhdChangeCtx; if(!ctx) return;
-  const prod = products.find(x=>x.id===ctx.id); if(!prod) return;
-  const oldSnapshot = {...prod, mhd: ctx.oldMhd};
-  bookWaste(oldSnapshot, grund||'MHD');
-  doSaveProduct(ctx.id, ctx.newData);
-  _mhdChangeCtx=null;
-  toast('Alte Charge gebucht: '+(grund||'MHD'));
+function pickMhdGrund(btn, grund){
+  _mhdChangeGrund = grund;
+  const wrap = document.getElementById('mhdGrundChips'); if(!wrap) return;
+  wrap.querySelectorAll('.grundchip').forEach(c=>c.classList.remove('on'));
+  btn.classList.add('on');
 }
-/* „Privatentnahme buchen" — als Verderb-Position mit Grund Privatentnahme. */
-function mhdChangePrivat(){
+function cancelMhdChange(){ _mhdChangeCtx=null; _mhdChangeGrund=null; closeModal(); }
+/* Buchen mit aktuell gewähltem Grund. Snapshot trägt das ALTE MHD; Privatentnahme bekommt Menge 1. */
+function mhdChangeBookSelected(){
   const ctx=_mhdChangeCtx; if(!ctx) return;
-  const prod = products.find(x=>x.id===ctx.id); if(!prod) return;
-  const oldSnapshot = {...prod, mhd: ctx.oldMhd};
-  bookWaste(oldSnapshot, 'Privatentnahme', { private_entnahme:'1' });
+  const grund=_mhdChangeGrund||'MHD';
+  const prod=products.find(x=>x.id===ctx.id); if(!prod) return;
+  const oldSnapshot={...prod, mhd: ctx.oldMhd};
+  const extra = grund==='Privatentnahme' ? { private_entnahme:'1' } : {};
+  bookWaste(oldSnapshot, grund, extra);
   doSaveProduct(ctx.id, ctx.newData);
-  _mhdChangeCtx=null;
-  toast('Als Privatentnahme gebucht');
+  _mhdChangeCtx=null; _mhdChangeGrund=null;
+  toast(grund==='Privatentnahme'?'Als Privatentnahme gebucht':'Alte Charge gebucht: '+grund);
 }
-/* „Verkauft" — keine Buchung, einfach speichern. */
+/* „Verkauft / nichts buchen" — Produkt einfach mit neuem MHD speichern. */
 function mhdChangeSoldOrPrivate(){
   const ctx=_mhdChangeCtx; if(!ctx) return;
   doSaveProduct(ctx.id, ctx.newData);
-  _mhdChangeCtx=null;
+  _mhdChangeCtx=null; _mhdChangeGrund=null;
   toast('MHD aktualisiert');
 }
-/* „Trotzdem überschreiben" — bewusst ohne Verderb-Eintrag (mit Hinweis). */
+/* „Trotzdem überschreiben" — bewusst ohne Verderb-Eintrag. */
 function mhdChangeForce(){
   const ctx=_mhdChangeCtx; if(!ctx) return;
   doSaveProduct(ctx.id, ctx.newData);
-  _mhdChangeCtx=null;
+  _mhdChangeCtx=null; _mhdChangeGrund=null;
   toast('Überschrieben — keine Verderb-Doku angelegt');
 }
 function delProduct(id){
