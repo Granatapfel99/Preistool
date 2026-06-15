@@ -1450,38 +1450,55 @@ function doSaveProduct(id, data){
     else toast(id?'Gespeichert':'Produkt angelegt');
   })();
 }
-/* Dialog: Was ist mit der alten (abgelaufenen) Charge passiert? */
+/* Dialog: Was ist mit der alten (abgelaufenen) Charge passiert?
+   Volle Auswahl wie im Warenverderb — ein Tap = Aktion + Grund in einem. */
 function showMhdChangeDialog(){
   const ctx=_mhdChangeCtx; if(!ctx) return;
   const days = Math.abs(ctx.oldStatus.t||0);
   const expText = ctx.oldStatus.key==='expired' ? `vor ${days} Tag${days===1?'':'en'} abgelaufen` : 'läuft heute ab';
+  // Verderb-Gründe (außer Privatentnahme, die hat eine eigene Aktion).
+  const verderbGruende = VERDERB_KATS.filter(k=>k!=='Privatentnahme');
   $('modal').innerHTML = `
     <div class="modal-head"><h2>Alte Charge — was tun?</h2>
       <button class="x" onclick="cancelMhdChange()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     <div class="modal-body">
-      <p class="d" style="margin-top:0">Das alte MHD <b>${esc(fmtDate(ctx.oldMhd))}</b> war <b>${esc(expText)}</b>. Du trägst gerade ein neues MHD <b>${esc(fmtDate(ctx.newData.mhd))}</b> ein — vermutlich neue Ware.</p>
-      <p class="d">Damit die alte Charge für den Steuerberater nicht stillschweigend verschwindet, sag bitte kurz, was damit passiert ist:</p>
-      <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
-        <button class="btn btn-danger" style="justify-content:flex-start;text-align:left" onclick="mhdChangeBookWaste()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg><span><b>Als Verderb buchen</b> — alte Charge verdorben</span></button>
-        <button class="btn btn-ghost" style="justify-content:flex-start;text-align:left" onclick="mhdChangeSoldOrPrivate()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M20 6 9 17l-5-5"/></svg><span><b>Verkauft / Privatentnahme</b> — alte Charge ist raus</span></button>
-        <button class="btn btn-ghost" style="justify-content:flex-start;text-align:left;opacity:.75" onclick="mhdChangeForce()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg><span><b>Trotzdem überschreiben</b> — ohne Verderb-Eintrag</span></button>
+      <p class="d" style="margin-top:0">Altes MHD <b>${esc(fmtDate(ctx.oldMhd))}</b> war <b>${esc(expText)}</b>. Du trägst gerade ein neues MHD <b>${esc(fmtDate(ctx.newData.mhd))}</b> ein.</p>
+      <p class="d" style="margin-bottom:8px">Was ist mit der alten Charge passiert?</p>
+      <div class="mhd-section-label">Als Verderb buchen — Grund wählen:</div>
+      <div class="mhd-grundgrid">
+        ${verderbGruende.map(k=>`<button type="button" class="mhd-grund-btn" onclick="mhdChangeBookWaste('${esc(k).replace(/'/g,"\\'")}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>${esc(k)}</button>`).join('')}
+      </div>
+      <div class="mhd-section-label" style="margin-top:14px">Oder kein Verderb:</div>
+      <div class="mhd-altgrid">
+        <button type="button" class="mhd-alt-btn" onclick="mhdChangePrivat()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Privatentnahme buchen</button>
+        <button type="button" class="mhd-alt-btn" onclick="mhdChangeSoldOrPrivate()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>Verkauft / nichts buchen</button>
+        <button type="button" class="mhd-alt-btn mhd-force" onclick="mhdChangeForce()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>Trotzdem überschreiben</button>
       </div>
     </div>`;
   showModal();
 }
 function cancelMhdChange(){ _mhdChangeCtx=null; closeModal(); }
-/* „Als Verderb buchen" — alte Charge mit altem MHD als Verderb verbuchen, dann neues MHD speichern. */
-function mhdChangeBookWaste(){
+/* „Als Verderb buchen" — mit dem getappten Grund. Snapshot trägt das ALTE MHD. */
+function mhdChangeBookWaste(grund){
   const ctx=_mhdChangeCtx; if(!ctx) return;
   const prod = products.find(x=>x.id===ctx.id); if(!prod) return;
-  // Snapshot des Produkts mit ALTEM MHD für die Verderb-Buchung erzeugen.
   const oldSnapshot = {...prod, mhd: ctx.oldMhd};
-  bookWaste(oldSnapshot, 'MHD');                       // legt Verderb-Position mit altem MHD an
-  doSaveProduct(ctx.id, ctx.newData);                   // dann das Produkt mit neuem MHD speichern
+  bookWaste(oldSnapshot, grund||'MHD');
+  doSaveProduct(ctx.id, ctx.newData);
   _mhdChangeCtx=null;
-  toast('Alte Charge als Verderb gebucht');
+  toast('Alte Charge gebucht: '+(grund||'MHD'));
 }
-/* „Verkauft / Privat" — keine Verderb-Buchung, einfach speichern. */
+/* „Privatentnahme buchen" — als Verderb-Position mit Grund Privatentnahme. */
+function mhdChangePrivat(){
+  const ctx=_mhdChangeCtx; if(!ctx) return;
+  const prod = products.find(x=>x.id===ctx.id); if(!prod) return;
+  const oldSnapshot = {...prod, mhd: ctx.oldMhd};
+  bookWaste(oldSnapshot, 'Privatentnahme', { private_entnahme:'1' });
+  doSaveProduct(ctx.id, ctx.newData);
+  _mhdChangeCtx=null;
+  toast('Als Privatentnahme gebucht');
+}
+/* „Verkauft" — keine Buchung, einfach speichern. */
 function mhdChangeSoldOrPrivate(){
   const ctx=_mhdChangeCtx; if(!ctx) return;
   doSaveProduct(ctx.id, ctx.newData);
