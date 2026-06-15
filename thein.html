@@ -1447,7 +1447,8 @@ function mhdISO(s){
   if(m){ const dd=m[1].padStart(2,'0'), mm=m[2].padStart(2,'0'); return m[3]+'-'+mm+'-'+dd; }
   return '';
 }
-/* Eigentliches Speichern — herausgezogen, damit der MHD-Schutz-Dialog es aufrufen kann. */
+/* Eigentliches Speichern — herausgezogen, damit der MHD-Schutz-Dialog es aufrufen kann.
+   skipRender: true, wenn vorher schon ein Verderb gebucht wurde (vermeidet Doppel-Render). */
 function doSaveProduct(id, data){
   data._updated = new Date().toISOString();   // für „zuletzt geändert"-Sortierung
   let saved;
@@ -1460,6 +1461,18 @@ function doSaveProduct(id, data){
                    catch(e){ toast('Lokal gespeichert (Cloud-Fehler)'); } }
     else toast(id?'Gespeichert':'Produkt angelegt');
   })();
+}
+/* Bucht einen Verderb OHNE sofortiges Render/Modal (für Aufrufe aus dem MHD-Dialog). */
+function bookWasteSilent(p, grund, extra){
+  const c=rechnePreis(p);
+  const saved = { id:uid(), grund, typ:(grund==='Privatentnahme'?'privat':'verderb'),
+    warenbezeichnung:p.name||'', menge:'1',
+    einzelpreis: c.verkauf!=null?r2(c.verkauf):'', mwst:String(num(p.mwst_ek||settings.default_mwst)),
+    mhd:fmtDate(p.mhd), ek_brutto:r2(c.ekBrutto), ek_netto:r4(c.ekNetto),
+    private_entnahme:'', kommentar:'', _updated:new Date().toISOString(), ...extra };
+  waste.push(saved); persist();
+  if(USE_CLOUD){ cloudUpsert('waste', saved).catch(()=>{}); }
+  return saved;
 }
 /* Dialog: Was ist mit der alten (abgelaufenen) Charge passiert?
    Stil = Warenverderb-Formular: Grund-Chips wählen, dann Aktion. Alles vorausgefüllt. */
@@ -1498,13 +1511,14 @@ function cancelMhdChange(){ _mhdChangeCtx=null; _mhdChangeGrund=null; closeModal
 function mhdChangeBookSelected(){
   const ctx=_mhdChangeCtx; if(!ctx) return;
   const grund=_mhdChangeGrund||'MHD';
-  const prod=products.find(x=>x.id===ctx.id); if(!prod) return;
+  const prod=products.find(x=>x.id===ctx.id);
+  _mhdChangeCtx=null; _mhdChangeGrund=null;
+  if(!prod){ doSaveProduct(ctx.id, ctx.newData); return; }
   const oldSnapshot={...prod, mhd: ctx.oldMhd};
   const extra = grund==='Privatentnahme' ? { private_entnahme:'1' } : {};
-  bookWaste(oldSnapshot, grund, extra);
-  doSaveProduct(ctx.id, ctx.newData);
-  _mhdChangeCtx=null; _mhdChangeGrund=null;
-  toast(grund==='Privatentnahme'?'Als Privatentnahme gebucht':'Alte Charge gebucht: '+grund);
+  bookWasteSilent(oldSnapshot, grund, extra);      // bucht ohne eigenes Render/Modal
+  doSaveProduct(ctx.id, ctx.newData);              // speichert + schließt Modal + rendert EINMAL
+  setTimeout(()=>toast(grund==='Privatentnahme'?'Als Privatentnahme gebucht':'Alte Charge gebucht: '+grund), 60);
 }
 /* „Verkauft / nichts buchen" — Produkt einfach mit neuem MHD speichern. */
 function mhdChangeSoldOrPrivate(){
