@@ -163,6 +163,18 @@ input,select,textarea{font-family:inherit;font-size:15px}
 .dot-exp{background:var(--warn);box-shadow:0 0 7px var(--warn)}
 .card-meta{font-size:12px;color:var(--txt3);font-family:var(--mono);margin-top:7px;display:flex;gap:14px}
 .mhd-soon{color:var(--warn)!important}
+.mhd-toggle{display:flex;align-items:center;gap:7px;margin-top:8px;font-size:12.5px;color:var(--txt2);cursor:pointer;font-weight:400}
+.mhd-toggle input{width:16px;height:16px;accent-color:var(--acc);flex-shrink:0}
+.pricelog p{margin:3px 0;font-size:12.5px;font-family:var(--mono)}
+.whatsnew-btn{position:relative;flex-shrink:0}
+.wn-dot{position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:var(--acc);box-shadow:0 0 0 2px var(--panel)}
+.cl-rel{margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.cl-rel:last-of-type{border-bottom:none}
+.cl-rel-head{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+.cl-date{font-weight:600;font-size:14px}
+.cl-badge{font-size:11px;font-weight:600;color:var(--acc);background:rgba(74,222,94,.14);padding:2px 9px;border-radius:99px}
+.cl-list{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:5px}
+.cl-list li{font-size:13.5px;color:var(--txt2);line-height:1.45}
 
 /* ---------- Empty ---------- */
 .empty{text-align:center;padding:70px 20px;color:var(--txt3)}
@@ -758,6 +770,23 @@ function brandOf(p){ const n=String(p.name||''); const i=n.indexOf(' - '); retur
 const BELIEBT_RANK = { 'hoch':3,'mittel':2,'niedrig':1,'keine angabe':0,'':0 };
 
 /* ---------- Zentrale Filter+Sortier-Logik (eine Quelle der Wahrheit) ---------- */
+/* Erstelldatum eines Produkts als ms-Timestamp.
+   Nutzt _created falls vorhanden, sonst den in der uid() codierten Zeitstempel
+   (erste 8 Zeichen = Date.now() in base36). So funktioniert „zuletzt hinzugefügt"
+   auch rückwirkend für Bestandsprodukte. Alte Zähl-IDs (1,2,3…) -> 0 (ans Ende). */
+/* Ein Produkt gilt als unvollständig, wenn EK fehlt ODER MHD fehlt —
+   außer es ist bewusst als „lange haltbar / kein MHD" markiert. */
+function istOhneMhd(p){ return !p.kein_mhd && !String(p.mhd||'').trim(); }
+function istUnvollstaendig(p){ return num(p.rohpreis)<=0 || istOhneMhd(p); }
+function createdOf(p){
+  if(p._created){ const t=Date.parse(p._created); if(!isNaN(t)) return t; }
+  const id=String(p.id||'');
+  if(/^[0-9a-z]{8,}$/.test(id)){
+    const ms=parseInt(id.slice(0,8),36);
+    if(!isNaN(ms) && ms>1600000000000 && ms<2000000000000) return ms;   // Plausi: 2020–2033
+  }
+  return 0;
+}
 const SORT_FIELDS = {
   name:    { label:'Name',           val:p=>norm(p.name), type:'str' },
   marke:   { label:'Marke',          val:p=>norm(brandOf(p)), type:'str' },
@@ -766,6 +795,7 @@ const SORT_FIELDS = {
   db:      { label:'Deckungsbeitrag',val:p=>rechnePreis(p).deckungsbeitrag, type:'num' },
   beliebt: { label:'Beliebtheit',    val:p=>BELIEBT_RANK[String(p.beliebtheit||'').toLowerCase()]??0, type:'num' },
   mhd:     { label:'Ablaufdatum (MHD)',val:p=>{ const t=mhdTage(p.mhd); return t==null?Infinity:t; }, type:'num' },
+  neu:     { label:'Zuletzt hinzugefügt',val:p=>createdOf(p), type:'num' },
   geaendert:{label:'Zuletzt geändert',val:p=>p._updated?Date.parse(p._updated)||0:0, type:'num' }
 };
 function cmpBy(key, dir){
@@ -785,7 +815,7 @@ function getVisibleProducts(dupes){
     if(filter.kat && p.kategorie!==filter.kat) return false;
     if(filter.abweichung && !rechnePreis(p).abweichung) return false;
     if(filter.dupes && dupes && !dupes.has(p.id)) return false;
-    if(filter.unvollstaendig && !(num(p.rohpreis)<=0 || !String(p.mhd||'').trim())) return false;
+    if(filter.unvollstaendig && !istUnvollstaendig(p)) return false;
     return true;
   });
   const c1=cmpBy(sort1, sort1dir);
@@ -876,6 +906,7 @@ function mhdTage(mhd){ if(!mhd) return null; const iso=mhdISO(mhd); const d=new 
 /* MHD-Status für Ampel/Logik. warnDays aus Settings (Default 7). */
 function warnDays(){ const n=num(settings.mhd_warn_tage); return n>0?n:7; }
 function mhdStatus(p){
+  if(p && p.kein_mhd) return {key:'none', t:null};   // lange haltbar -> nie in Ablauf-Überwachung
   const t=mhdTage(p.mhd);
   if(t==null) return {key:'none', t:null};
   if(t<0)  return {key:'expired', t};
@@ -888,6 +919,34 @@ function fmtDate(d){ const x=new Date(d); return isNaN(x)?'':x.toLocaleDateStrin
 /* =====================================================================
    NAVIGATION
    ===================================================================== */
+/* =====================================================================
+   CHANGELOG — Release-Verlauf für Thomas (neueste zuerst)
+   ===================================================================== */
+const APP_VERSION = '2026.08';
+const CHANGELOG = [
+  { v:'2026.08', date:'August 2026', changes:[
+    'Sortierung „Zuletzt hinzugefügt" in der Produktliste',
+    'Neuer Schalter „Lange haltbar / kein MHD nötig" — kein Fantasie-Datum mehr für Liquids & Co.',
+    'Preisverlauf pro Produkt: EK-/VK-Änderungen werden mitgeschrieben',
+    'Dieser Neuigkeiten-Bereich hier :)'
+  ]},
+  { v:'2026.07', date:'Juli 2026', changes:[
+    'Schutzabfrage beim MHD-Wechsel: alte Charge wird nicht mehr stillschweigend überschrieben',
+    'Verderb-Dialog mit voller Grund-Auswahl (Chips) direkt beim Nachpflegen'
+  ]},
+  { v:'2026.06', date:'Juni 2026', changes:[
+    'Suchfeld im Warenverderb (Name, Grund, Kommentar)',
+    'Rückgängig-Funktion auch beim Umbenennen/Löschen von Kategorien',
+    'Verderbwert wird netto und brutto ausgewiesen'
+  ]},
+  { v:'2026.05', date:'Mai 2026', changes:[
+    'Dashboard-Übersicht mit Kennzahlen & Sorgenkindern',
+    'Mehrfachauswahl: mehrere Produkte gleichzeitig bearbeiten/löschen',
+    'Kategorien anlegen, umbenennen, entfernen',
+    'Produktliste als Excel exportieren'
+  ]}
+];
+
 const NAV = [
   {id:'dashboard', label:'Übersicht', icon:'<rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/>'},
   {id:'produkte', label:'Produkte', icon:'<path d="M3 9h18M9 21V9M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/>'},
@@ -926,6 +985,28 @@ function updateFoot(){ const f=$('foot'); if(f) f.textContent = `${products.leng
 function setSync(s){ syncState=s; updateFoot(); }
 
 /* ---------- Dashboard (Startseite) ---------- */
+/* Release-Verlauf: hat der Nutzer die aktuelle Version schon gesehen? */
+function changelogUnseen(){
+  try{ return localStorage.getItem('thein_seen_version') !== APP_VERSION; }catch(e){ return false; }
+}
+function markChangelogSeen(){
+  try{ localStorage.setItem('thein_seen_version', APP_VERSION); }catch(e){}
+}
+function showChangelog(){
+  markChangelogSeen();
+  $('modal').innerHTML = `
+    <div class="modal-head"><h2>Was ist neu?</h2>
+      <button class="x" onclick="closeModal();render()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body">
+      ${CHANGELOG.map((rel,i)=>`
+        <div class="cl-rel">
+          <div class="cl-rel-head"><span class="cl-date">${esc(rel.date)}</span>${i===0?'<span class="cl-badge">aktuell</span>':''}</div>
+          <ul class="cl-list">${rel.changes.map(c=>`<li>${esc(c)}</li>`).join('')}</ul>
+        </div>`).join('')}
+      <p class="d" style="text-align:center;margin-top:6px">Danke, dass du The IN nutzt 🎁</p>
+    </div>`;
+  showModal();
+}
 function renderDashboard(){
   const n = products.length;
   // Kennzahlen übers Sortiment
@@ -966,13 +1047,15 @@ function renderDashboard(){
 
   // Unvollständige Produkte: kein EK-Preis hinterlegt oder kein MHD (z.B. frische Vendon-Importe).
   const ohneEk  = products.filter(p=>num(p.rohpreis)<=0).length;
-  const ohneMhd = products.filter(p=>!String(p.mhd||'').trim()).length;
-  const unvollstaendig = products.filter(p=>num(p.rohpreis)<=0 || !String(p.mhd||'').trim()).length;
+  const ohneMhd = products.filter(istOhneMhd).length;
+  const unvollstaendig = products.filter(istUnvollstaendig).length;
 
   const kpi=(val,label,cls,onclick)=>`<div class="dashkpi ${cls||''}" ${onclick?`onclick="${onclick}" style="cursor:pointer"`:''}><div class="dashkpi-val">${val}</div><div class="dashkpi-lbl">${label}</div></div>`;
 
   $('content').innerHTML = `
-    <div class="page-head"><div><h1>Übersicht</h1><div class="sub">Dein Lagebild auf einen Blick · ${SYNC_LABEL[syncState]||syncState}</div></div></div>
+    <div class="page-head"><div><h1>Übersicht</h1><div class="sub">Dein Lagebild auf einen Blick · ${SYNC_LABEL[syncState]||syncState}</div></div>
+      <button class="btn btn-ghost whatsnew-btn" onclick="showChangelog()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></svg>Neu${changelogUnseen()?'<span class="wn-dot"></span>':''}</button>
+    </div>
 
     <div class="dashgrid">
       ${kpi(n, 'Produkte gepflegt', '', "go('produkte')")}
@@ -1020,7 +1103,7 @@ function renderDashboard(){
 function renderProdukte(){
   const kats = [...new Set(products.map(p=>p.kategorie).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'de'));
   const dupes = duplicateIds();
-  const unvollCount = products.filter(p=>num(p.rohpreis)<=0 || !String(p.mhd||'').trim()).length;
+  const unvollCount = products.filter(istUnvollstaendig).length;
   const list = getVisibleProducts(dupes);
   const abw = products.filter(p=>rechnePreis(p).abweichung).length;
   const sortOpts = (sel)=>Object.entries(SORT_FIELDS).map(([k,f])=>`<option value="${k}" ${sel===k?'selected':''}>${f.label}</option>`).join('');
@@ -1069,7 +1152,13 @@ function renderProdukte(){
   const si = $('searchInput');
   si.oninput = ()=>{ search=si.value; lightRenderProducts(); };
   $('katFilter').onchange = e=>{ filter.kat=e.target.value; render(); };
-  $('sort1').onchange = e=>{ sort1=e.target.value; saveViewPrefs(); lightRenderProducts(); };
+  $('sort1').onchange = e=>{
+    sort1=e.target.value;
+    // Bei Datums-Sortierungen sinnvoll: neueste zuerst (absteigend).
+    if(sort1==='neu'||sort1==='geaendert') sort1dir='desc';
+    saveViewPrefs(); lightRenderProducts();
+    const b=$('sortDir'); if(b) b.textContent=sort1dir==='asc'?'↑':'↓';
+  };
   $('sort2').onchange = e=>{ sort2=e.target.value; saveViewPrefs(); lightRenderProducts(); };
 }
 function renderItems(list, dupes){
@@ -1092,7 +1181,7 @@ function toggleSortDir(){ sort1dir = sort1dir==='asc'?'desc':'asc'; saveViewPref
 function cardHtml(p, isDupe){
   const c = rechnePreis(p);
   const st = mhdStatus(p);
-  const mhdHtml = p.mhd ? `<span class="${st.key==='soon'||st.key==='today'||st.key==='expired'?'mhd-soon':''}">MHD ${new Date(p.mhd).toLocaleDateString('de-DE')}</span>` : '';
+  const mhdHtml = p.kein_mhd ? `<span style="color:var(--txt3)">ohne MHD</span>` : (p.mhd ? `<span class="${st.key==='soon'||st.key==='today'||st.key==='expired'?'mhd-soon':''}">MHD ${new Date(p.mhd).toLocaleDateString('de-DE')}</span>` : '');
   const sel = selectedIds.has(p.id);
   if(selectMode){
     return `<div class="card sel-card${sel?' sel-on':''}" onclick="toggleSelect('${p.id}')">
@@ -1133,7 +1222,7 @@ function rowHtml(p, isDupe){
   return `<div class="prow${isDupe?' is-dupe':''}" onclick="openProduct('${p.id}')">
     <div class="prow-main">
       <div class="prow-name">${esc(p.name||'(ohne Name)')}${isDupe?' <span class="dupe-tag">Duplikat</span>':''}</div>
-      <div class="prow-sub">${esc(p.kategorie||'—')}${p.mhd?` · <span class="${st.key==='soon'||st.key==='today'||st.key==='expired'?'mhd-soon':''}">MHD ${new Date(p.mhd).toLocaleDateString('de-DE')}</span>`:''}</div>
+      <div class="prow-sub">${esc(p.kategorie||'—')}${p.kein_mhd?` · <span style="color:var(--txt3)">ohne MHD</span>`:(p.mhd?` · <span class="${st.key==='soon'||st.key==='today'||st.key==='expired'?'mhd-soon':''}">MHD ${new Date(p.mhd).toLocaleDateString('de-DE')}</span>`:'')}</div>
     </div>
     <div class="prow-db">Gewinn ${eur(c.gewinn)} €</div>
     <div class="prow-price">${c.abweichung?`<span class="tag tag-warn" style="margin-right:7px">⚠</span>`:''}${eur(c.verkauf)} €</div>
@@ -1330,11 +1419,28 @@ function openProduct(id, prefill){
       <fieldset class="fieldset" style="border:none;padding:0;margin:0 0 20px"><legend>Verkauf & Status</legend><div class="fgrid">
         <div class="field"><label>Preisschild (€) <span class="hint">leer = Vorschlag</span></label><input id="f_schild" type="text" inputmode="decimal" value="${g('preisschild','')}" oninput="liveCalc()"></div>
         <div class="field"><label>Aktionspreis (€) <span class="hint">optional</span></label><input id="f_aktion" type="text" inputmode="decimal" value="${g('aktionspreis','')}" oninput="liveCalc()"></div>
-        <div class="field"><label>MHD <span class="req">*Pflicht</span></label><input id="f_mhd" type="date" value="${mhdISO(g('mhd',''))}"></div>
+        <div class="field"><label>MHD <span class="req" id="mhdReq" ${g('kein_mhd')?'style="display:none"':''}>*Pflicht</span></label>
+          <input id="f_mhd" type="date" value="${mhdISO(g('mhd',''))}" ${g('kein_mhd')?'disabled style="opacity:.4"':''}>
+          <label class="mhd-toggle"><input type="checkbox" id="f_keinmhd" ${g('kein_mhd')?'checked':''} onchange="toggleKeinMhd()"> Lange haltbar / kein MHD nötig</label>
+        </div>
         <div class="field"><label>Beliebtheit</label><select id="f_bel"><option ${g('beliebtheit','keine Angabe')==='keine Angabe'?'selected':''}>keine Angabe</option><option ${g('beliebtheit')==='niedrig'?'selected':''}>niedrig</option><option ${g('beliebtheit')==='mittel'?'selected':''}>mittel</option><option ${g('beliebtheit')==='hoch'?'selected':''}>hoch</option></select></div>
       </div></fieldset>
 
       <div class="calc" id="calcBox"></div>
+      ${(!isNew && Array.isArray(p._pricelog) && p._pricelog.length)?`
+      <details class="kpi-help">
+        <summary>Preisverlauf (${p._pricelog.length})</summary>
+        <div class="kpi-help-body pricelog">
+          ${[...p._pricelog].reverse().map(e=>{
+            const d=new Date(e.t); const ds=isNaN(d)?'':d.toLocaleDateString('de-DE');
+            const parts=[];
+            if(num(e.ekAlt)!==num(e.ekNeu)) parts.push(`EK ${eur(e.ekAlt)} → <b>${eur(e.ekNeu)} €</b>`);
+            const va=e.vkAlt==null?null:num(e.vkAlt), vn=e.vkNeu==null?null:num(e.vkNeu);
+            if(va!==vn) parts.push(`VK ${va==null?'—':eur(va)} → <b>${vn==null?'Vorschlag':eur(vn)+' €'}</b>`);
+            return parts.length?`<p><span style="color:var(--txt3)">${ds}:</span> ${parts.join(' · ')}</p>`:'';
+          }).join('')}
+        </div>
+      </details>`:''}
       <details class="kpi-help">
         <summary>Was bedeuten diese Werte?</summary>
         <div class="kpi-help-body">
@@ -1357,6 +1463,7 @@ function openProduct(id, prefill){
   liveCalc();
 }
 function readForm(){
+  const keinMhd = $('f_keinmhd') ? $('f_keinmhd').checked : false;
   return {
     name:$('f_name').value.trim(), kategorie:$('f_kat').value.trim(), ean:$('f_ean').value.trim(),
     rohpreis:num($('f_roh').value), netto_brutto:$('f_nb').value, mwst_ek:num($('f_mwstek').value),
@@ -1366,11 +1473,20 @@ function readForm(){
     pfand_typ:$('f_pfandtyp')?$('f_pfandtyp').value.trim():'',
     preisschild:$('f_schild').value.trim()===''?'':num($('f_schild').value),
     aktionspreis:$('f_aktion').value.trim()===''?'':num($('f_aktion').value),
-    mhd:mhdISO($('f_mhd').value)||$('f_mhd').value, beliebtheit:$('f_bel').value,
+    kein_mhd:keinMhd,
+    mhd: keinMhd ? '' : (mhdISO($('f_mhd').value)||$('f_mhd').value),
+    beliebtheit:$('f_bel').value,
     gebinde_aktiv:$('f_geb')?$('f_geb').checked:false,
     gebinde_preis:$('f_gebpreis')&&$('f_gebpreis').value.trim()!==''?num($('f_gebpreis').value):'',
     gebinde_stueck:$('f_gebstk')&&$('f_gebstk').value.trim()!==''?num($('f_gebstk').value):''
   };
+}
+/* „Lange haltbar"-Schalter: MHD-Feld deaktivieren + Pflicht-Markierung ausblenden. */
+function toggleKeinMhd(){
+  const on=$('f_keinmhd').checked;
+  const inp=$('f_mhd'), req=$('mhdReq');
+  if(inp){ inp.disabled=on; inp.style.opacity=on?'.4':''; if(on) inp.value=''; }
+  if(req) req.style.display=on?'none':'';
 }
 function togglePfand(){ const on=$('f_pfandakt').checked; $('pfandBox').style.display=on?'grid':'none'; liveCalc(); }
 function toggleGebinde(){
@@ -1425,7 +1541,7 @@ function filterKatChips(){
 function saveProduct(id){
   const data = readForm();
   if(!data.name){ toast('Bitte einen Namen eingeben'); const e=$('f_name'); if(e)e.focus(); return; }
-  if(!data.mhd){ toast('Bitte MHD eintragen (Pflichtfeld)'); const e=$('f_mhd'); if(e){ try{ e.focus(); }catch(_){ } setTimeout(()=>{ try{ if(e.showPicker) e.showPicker(); }catch(_){ } }, 0); } return; }
+  if(!data.kein_mhd && !data.mhd){ toast('Bitte MHD eintragen (Pflichtfeld)'); const e=$('f_mhd'); if(e){ try{ e.focus(); }catch(_){ } setTimeout(()=>{ try{ if(e.showPicker) e.showPicker(); }catch(_){ } }, 0); } return; }
   // Schutz vor Daten-Verlust: Ein bestehender Artikel wird nachgekauft -> sein MHD ändert sich.
   // War das ALTE MHD bereits abgelaufen/läuft heute ab, muss zuerst entschieden werden, was
   // mit der alten (verdorbenen) Charge passiert, BEVOR das alte MHD überschrieben wird.
@@ -1460,8 +1576,21 @@ function mhdISO(s){
 function doSaveProduct(id, data){
   data._updated = new Date().toISOString();   // für „zuletzt geändert"-Sortierung
   let saved;
-  if(id){ const i=products.findIndex(x=>x.id===id); saved = products[i] = {...products[i], ...data}; }
-  else  { saved = {id:uid(), ...data}; products.push(saved); }
+  if(id){
+    const i=products.findIndex(x=>x.id===id);
+    const prev=products[i]||{};
+    // Preishistorie: EK oder VK-Änderung protokollieren (max. 12 Einträge).
+    const ekAlt=num(prev.rohpreis), ekNeu=num(data.rohpreis);
+    const vkAlt=prev.preisschild===''||prev.preisschild==null?null:num(prev.preisschild);
+    const vkNeu=data.preisschild===''||data.preisschild==null?null:num(data.preisschild);
+    let log=Array.isArray(prev._pricelog)?[...prev._pricelog]:[];
+    if(ekAlt!==ekNeu || vkAlt!==vkNeu){
+      log.push({ t:data._updated, ekAlt, ekNeu, vkAlt, vkNeu });
+      if(log.length>12) log=log.slice(-12);
+    }
+    saved = products[i] = {...prev, ...data, _pricelog:log};
+  }
+  else  { saved = {id:uid(), _created:new Date().toISOString(), ...data}; products.push(saved); }
   persist(); closeModal(); render();                       // sofort sichtbar
   (async()=>{
     if(saved.ean) await learnEan(saved.ean, saved.name);   // Name für diese EAN merken
