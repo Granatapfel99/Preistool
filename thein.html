@@ -44,10 +44,11 @@
   --acc:#1f9d3a;--acc-dim:#1f9d3a;--warn:#d8401c;--warn-bg:#fbe9e4;--ok:#1f9d3a;--blue:#2f6fe0;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;padding:0}
+html,body{margin:0;padding:0;overflow-x:clip}
 body{
   font-family:var(--sans);background:var(--bg);color:var(--txt);
   font-size:15px;line-height:1.45;min-height:100vh;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
   background-image:radial-gradient(circle at 18% -10%,rgba(74,222,94,.07),transparent 45%),radial-gradient(circle at 100% 0%,rgba(91,157,255,.05),transparent 40%);
   background-attachment:fixed;
 }
@@ -91,6 +92,7 @@ input,select,textarea{font-family:inherit;font-size:15px}
 .btn-ghost:hover{background:var(--panel2);border-color:var(--acc-dim)}
 .btn-danger{background:var(--warn-bg);color:var(--warn);border-color:transparent}
 .btn-danger:hover{filter:brightness(1.1)}
+.btn:active{transform:translateY(1px)}
 .btn-sm{padding:7px 12px;font-size:13px}
 
 /* ---------- Toolbar ---------- */
@@ -208,6 +210,8 @@ input,select,textarea{font-family:inherit;font-size:15px}
 .field label{font-size:12.5px;color:var(--txt2);font-weight:500}
 .field input,.field select,.field textarea{padding:10px 12px;background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius-sm);color:var(--txt);outline:none;transition:.12s;width:100%}
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--acc-dim);box-shadow:0 0 0 3px rgba(74,222,94,.1)}
+/* Datumsfelder (z.B. MHD) brauchen keine volle Breite — kompakt wirkt aufgeräumter. */
+.field input[type="date"]{max-width:220px;min-height:41px}
 .field .hint{font-size:11px;color:var(--txt3)}
 .field .req{font-size:11px;color:var(--warn);font-weight:600}
 .geb-hint{font-size:13px;color:var(--txt2);font-family:var(--mono);background:rgba(74,222,94,.08);border:1px solid var(--acc-dim);border-radius:var(--radius-sm);padding:9px 12px}
@@ -263,9 +267,9 @@ input,select,textarea{font-family:inherit;font-size:15px}
 .calc-row{display:flex;justify-content:space-between;align-items:baseline;font-size:13px}
 .calc-row span{color:var(--txt2)}
 .calc-row b{font-family:var(--mono);font-weight:600;font-size:14px}
-.calc-hero{grid-column:1/-1;border-top:1px solid var(--line);margin-top:5px;padding-top:11px;display:flex;justify-content:space-between;align-items:center}
-.calc-hero .lbl{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--txt2);font-family:var(--mono)}
-.calc-hero .val{font-family:var(--mono);font-weight:600;font-size:30px;letter-spacing:-1px;color:var(--acc)}
+.calc-hero{grid-column:1/-1;border-top:1px solid var(--line);margin-top:5px;padding-top:11px;display:flex;justify-content:space-between;align-items:center;gap:12px}
+.calc-hero .lbl{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--txt2);font-family:var(--mono);min-width:0}
+.calc-hero .val{font-family:var(--mono);font-weight:600;font-size:30px;letter-spacing:-1px;color:var(--acc);white-space:nowrap;flex-shrink:0}
 .pos{color:var(--ok)}.neg{color:var(--warn)}
 .kpi-help{margin:-8px 0 20px;font-size:13px}
 .kpi-help summary{cursor:pointer;color:var(--txt2);font-family:var(--mono);font-size:12px;padding:6px 0;list-style:none;user-select:none}
@@ -350,9 +354,9 @@ tbody tr:hover{background:var(--panel2)}
 .bulk-actions{display:flex;gap:7px;flex-wrap:wrap}
 /* ---------- Dashboard ---------- */
 .dashgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px;min-width:0}
-.dashkpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;transition:.12s}
+.dashkpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;transition:.12s;min-width:0;box-shadow:0 1px 2px rgba(0,0,0,.12)}
 .dashkpi[style*=cursor]:hover{border-color:var(--line2);transform:translateY(-1px)}
-.dashkpi-val{font-family:var(--mono);font-size:26px;font-weight:700;line-height:1.1}
+.dashkpi-val{font-family:var(--mono);font-size:26px;font-weight:700;line-height:1.1;letter-spacing:-.5px;font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dashkpi-lbl{font-size:12px;color:var(--txt3);margin-top:4px}
 .dashkpi.ok .dashkpi-val{color:var(--acc)}
 .dashkpi.warn .dashkpi-val{color:#ffb44d}
@@ -363,23 +367,37 @@ tbody tr:hover{background:var(--panel2)}
 .dashnote.info:hover{background:rgba(91,157,255,.16)}
 .dashcols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 @media(max-width:820px){.dashcols{grid-template-columns:1fr}}
-.dashcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
-.dashcard h3{margin:0 0 14px;font-size:15px}
+/* min-width:0 ist Pflicht: Grid-Items haben sonst min-width:auto und werden von
+   nowrap-Inhalten (lange Produktnamen) breiter als der Bildschirm gedrückt. */
+.dashcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px;min-width:0;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.dashcard h3{margin:0 0 12px;font-size:15px;letter-spacing:-.2px}
 .dashcard-sub{font-size:12px;color:var(--txt3);font-weight:400;margin-left:6px}
-.dashlist{display:flex;flex-direction:column;gap:2px}
-.dashrow{display:flex;align-items:center;gap:8px;padding:9px 8px;border-radius:var(--radius-sm);cursor:pointer;transition:.1s}
-.dashrow:hover{background:var(--panel2)}
+.dashlist{display:flex;flex-direction:column;gap:2px;min-width:0}
+.dashrow{display:flex;align-items:center;gap:12px;padding:10px 9px;border-radius:var(--radius-sm);cursor:pointer;transition:background .12s;min-width:0}
+.dashrow:hover,.dashrow:active{background:var(--panel2)}
 .dashrow-main{flex:1 1 auto;min-width:0}
 .dashrow-name{font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dashrow-sub{font-size:11.5px;color:var(--txt3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dashrow-tags{display:flex;gap:5px;flex:0 0 auto;flex-wrap:wrap;justify-content:flex-end;max-width:55%}
-.dashrow-tags .tag{font-size:10.5px;padding:2px 7px;white-space:nowrap}
-.dashbars{display:flex;flex-direction:column;gap:11px}
+.dashrow-sub{font-size:11.5px;color:var(--txt3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.dashrow-sub .subwarn{color:var(--warn);font-weight:600}
+/* Rechtes Accessory (Marge) — fixe Breite, Name links bekommt den Rest + Ellipsis. */
+.dashrow-acc{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;line-height:1.25}
+.dashrow-marge{font-family:var(--mono);font-weight:600;font-size:14px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.dashrow-acc.ok .dashrow-marge{color:var(--txt2)}
+.dashrow-acc.warn .dashrow-marge{color:#ffb44d}
+.dashrow-acc.bad .dashrow-marge{color:var(--warn)}
+.dashrow-margelbl{font-size:9.5px;color:var(--txt3);text-transform:uppercase;letter-spacing:.7px;font-family:var(--mono)}
+.dashbars{display:flex;flex-direction:column;gap:11px;min-width:0}
 .dashbar-top{display:flex;justify-content:space-between;gap:8px;font-size:13px;margin-bottom:4px}
 .dashbar-top span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .dashbar-cnt{font-family:var(--mono);color:var(--txt2);flex-shrink:0}
 .dashbar-track{height:8px;background:var(--bg2);border-radius:99px;overflow:hidden}
 .dashbar-fill{height:100%;background:var(--acc);border-radius:99px;transition:width .3s}
+/* Summenzeile unter den Verderb-Balken — bricht nie um, Werte rechtsbündig gestapelt. */
+.dashsum{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.dashsum-lbl{font-size:12.5px;color:var(--txt2);white-space:nowrap}
+.dashsum-vals{display:flex;flex-direction:column;align-items:flex-end;gap:1px;min-width:0}
+.dashsum-vals b{font-family:var(--mono);font-size:15px;font-weight:600;white-space:nowrap}
+.dashsum-vals span{font-size:11.5px;color:var(--txt3);font-family:var(--mono);white-space:nowrap}
 /* EAN-Feld mit Scan-/Lookup-Buttons */
 .ean-row{display:flex;gap:7px}
 .ean-row input{flex:1}
@@ -425,32 +443,46 @@ tbody tr:hover{background:var(--panel2)}
 .botnav{display:none}
 @media(max-width:860px){
   .sidebar{display:none}
-  .topbar{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;background:var(--bg2);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:30}
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;background:var(--bg2);background:color-mix(in srgb,var(--bg2) 86%,transparent);backdrop-filter:blur(14px) saturate(160%);-webkit-backdrop-filter:blur(14px) saturate(160%);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:30}
   .topbar .brand{padding:0}
   .topbar .brand-logo{width:32px;height:32px}
   .topbar .brand-txt b{font-size:16px}
-  .content{padding:18px 15px 100px}
+  .content{padding:18px 16px 110px}
   .page-head h1{font-size:23px}
   .grid{grid-template-columns:1fr}
   .fgrid{grid-template-columns:1fr}
   .calc-grid{grid-template-columns:1fr}
-  .fab-wrap{bottom:90px}
+  .fab-wrap{bottom:calc(84px + env(safe-area-inset-bottom,0px))}
   .prow-db{display:none}
+  /* Dashboard kompakt: feste 2 Spalten, kleinere Werte -> nichts läuft über. */
+  .dashgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .dashkpi{padding:14px 15px}
+  .dashkpi-val{font-size:22px}
+  .dashcard{padding:15px 14px}
+  .calc-hero .val{font-size:26px}
+  .vend-stats{grid-template-columns:repeat(2,1fr)}
+  .toast{bottom:calc(80px + env(safe-area-inset-bottom,12px));max-width:92vw}
   .sortbar{gap:11px}
   .sortgrp{width:100%}
   .sortpick{width:100%}
   .sortpick .selstyle{flex:1;min-width:0}
   .sortgrp>.selstyle{width:100%}
   .sortchips{margin-left:0;width:100%;align-self:stretch}
-  .botnav{display:flex;position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:1px solid var(--line);z-index:35;padding:6px 4px 18px}
-  .botnav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px;color:var(--txt3);font-size:10.5px;font-weight:600}
-  .botnav button svg{width:21px;height:21px}
+  /* Bottom-Nav bleibt position:fixed;bottom:0 (bewährt). Milchglas + Safe-Area wie bei iOS-Tab-Bars. */
+  .botnav{display:flex;position:fixed;bottom:0;left:0;right:0;background:var(--bg2);background:color-mix(in srgb,var(--bg2) 84%,transparent);backdrop-filter:blur(18px) saturate(160%);-webkit-backdrop-filter:blur(18px) saturate(160%);border-top:1px solid var(--line);z-index:35;padding:8px 4px calc(8px + env(safe-area-inset-bottom,12px))}
+  .botnav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;color:var(--txt3);font-size:10.5px;font-weight:600;min-width:0;transition:color .12s,transform .1s}
+  .botnav button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .botnav button svg{width:22px;height:22px}
   .botnav button.active{color:var(--acc)}
+  .botnav button:active{transform:scale(.94)}
   .overlay{padding:0;align-items:flex-end}
-  .modal{max-width:none;border-radius:18px 18px 0 0;max-height:94vh;overflow-y:auto;margin:0}
-  .modal-head{border-radius:18px 18px 0 0}
+  .modal{max-width:none;border-radius:18px 18px 0 0;max-height:94vh;overflow-y:auto;margin:0;-webkit-overflow-scrolling:touch}
+  .modal-head{border-radius:18px 18px 0 0;padding-top:26px}
+  /* Grabber-Griff oben am Sheet — vertrautes iOS-Muster. */
+  .modal-head:before{content:"";position:absolute;top:9px;left:50%;transform:translateX(-50%);width:38px;height:4px;border-radius:99px;background:var(--line2)}
+  .modal-body{padding-bottom:calc(20px + env(safe-area-inset-bottom,0px))}
   /* Bulk-Leiste auf Mobile: volle Breite direkt ÜBER der Navigation, nichts überlappt. */
-  .bulkbar{left:0;right:0;bottom:74px;transform:none;width:100%;max-width:none;border-radius:14px 14px 0 0;border-left:none;border-right:none;border-bottom:none;flex-direction:column;align-items:stretch;gap:9px;padding:12px 14px calc(12px + env(safe-area-inset-bottom,0px))}
+  .bulkbar{left:0;right:0;bottom:calc(64px + env(safe-area-inset-bottom,12px));transform:none;width:100%;max-width:none;border-radius:14px 14px 0 0;border-left:none;border-right:none;border-bottom:none;flex-direction:column;align-items:stretch;gap:9px;padding:12px 14px}
   .bulk-count{text-align:center}
   .bulk-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .bulk-actions .btn{justify-content:center;width:100%}
@@ -924,9 +956,12 @@ function fmtDate(d){ const x=new Date(d); return isNaN(x)?'':x.toLocaleDateStrin
 /* =====================================================================
    CHANGELOG — Release-Verlauf für Thomas (neueste zuerst)
    ===================================================================== */
-const APP_VERSION = '2026.08';
+const APP_VERSION = '2026.08.1';
 const CHANGELOG = [
   { v:'2026.08', date:'August 2026', changes:[
+    'Mobil-Feinschliff: Übersicht passt sich sauber an schmale Bildschirme an — nichts läuft mehr über den Rand',
+    'Navigationsleiste, Kopfzeile & Dialoge im iOS-Stil (Milchglas-Effekt, Grabber am Sheet)',
+    'Sorgenkinder-Liste aufgeräumt: Marge rechts auf einen Blick, Warnhinweise kompakt in der Unterzeile',
     'Sortierung „Zuletzt hinzugefügt" in der Produktliste',
     'Neuer Schalter „Lange haltbar / kein MHD nötig" — kein Fantasie-Datum mehr für Liquids & Co.',
     'Preisverlauf pro Produkt: EK-/VK-Änderungen werden mitgeschrieben',
@@ -1073,15 +1108,14 @@ function renderDashboard(){
     <div class="dashcols">
       <div class="dashcard">
         <h3>Sorgenkinder <span class="dashcard-sub">schwächste Marge zuerst</span></h3>
-        ${sorgen.length?`<div class="dashlist">${sorgen.slice(0,12).map(({p,c})=>`
+        ${sorgen.length?`<div class="dashlist">${sorgen.slice(0,12).map(({p,c})=>{
+          const accCls = c.gewinn<0 ? 'bad' : (c.margeNetto<20 ? 'warn' : 'ok');
+          const flags = [c.gewinn<0?'<span class="subwarn">Verlust</span>':'', c.abweichung?'<span class="subwarn">unter Vorschlag</span>':''].filter(Boolean).join(' · ');
+          return `
           <div class="dashrow" onclick="openProduct('${p.id}')">
-            <div class="dashrow-main"><div class="dashrow-name">${esc(p.name||'(ohne Name)')}</div><div class="dashrow-sub">${esc(p.kategorie||'—')} · VK ${eur(c.verkauf)} €</div></div>
-            <div class="dashrow-tags">
-              ${c.gewinn<0?`<span class="tag tag-warn">Verlust</span>`:''}
-              ${c.abweichung?`<span class="tag tag-warn">unter Vorschlag</span>`:''}
-              <span class="tag ${c.margeNetto<20?'tag-warn':'tag-mut'}">${c.margeNetto.toFixed(0)} % Marge</span>
-            </div>
-          </div>`).join('')}</div>
+            <div class="dashrow-main"><div class="dashrow-name">${esc(p.name||'(ohne Name)')}</div><div class="dashrow-sub">${esc(p.kategorie||'—')} · VK ${eur(c.verkauf)} €${flags?' · '+flags:''}</div></div>
+            <div class="dashrow-acc ${accCls}"><span class="dashrow-marge">${c.margeNetto.toFixed(0)} %</span><span class="dashrow-margelbl">Marge</span></div>
+          </div>`;}).join('')}</div>
           ${sorgen.length>12?`<p class="d" style="margin:10px 2px 0">… und ${sorgen.length-12} weitere. <a onclick="go('produkte')" style="color:var(--acc);cursor:pointer">Alle ansehen</a></p>`:''}`
           :`<p class="d">Alles im grünen Bereich — keine Produkte unter Vorschlag oder mit schwacher Marge. 👍</p>`}
       </div>
@@ -1093,7 +1127,7 @@ function renderDashboard(){
             <div class="dashbar-top"><span>${esc(g)}</span><span class="dashbar-cnt">${cnt}×</span></div>
             <div class="dashbar-track"><div class="dashbar-fill" style="width:${grundMax?Math.round(cnt/grundMax*100):0}%"></div></div>
           </div>`).join('')}</div>
-          <p class="d" style="margin:12px 2px 0">Verderbwert ${jahr}: <b>${eur(verderbNetto)} €</b> netto · ${eur(verderbBrutto)} € brutto</p>`
+          <div class="dashsum"><span class="dashsum-lbl">Verderbwert ${jahr}</span><span class="dashsum-vals"><b>${eur(verderbNetto)} € netto</b><span>${eur(verderbBrutto)} € brutto</span></span></div>`
           :`<p class="d">Noch kein Verderb in ${jahr} gebucht.</p>`}
       </div>
     </div>
