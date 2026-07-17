@@ -56,6 +56,18 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 input,select,textarea{font-family:inherit;font-size:15px}
 .mono{font-family:var(--mono)}
 .app{display:flex;min-height:100vh}
+/* Natives Browser-Pull-to-Refresh aus -> die App bringt ihr eigenes (konsistent auf iOS & Android). */
+body{overscroll-behavior-y:contain}
+
+/* ---------- Pull-to-Refresh ---------- */
+.ptr{position:fixed;top:calc(env(safe-area-inset-top,0px) - 46px);left:50%;margin-left:-19px;width:38px;height:38px;border-radius:50%;background:var(--panel2);border:1px solid var(--line2);box-shadow:0 6px 18px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:60;opacity:0;transform:translateY(0);transition:transform .22s ease,opacity .22s ease;pointer-events:none}
+.ptr.pull{transition:none}
+.ptr svg{width:18px;height:18px;color:var(--acc)}
+.ptr.spin svg{animation:ptrspin .7s linear infinite}
+@keyframes ptrspin{to{transform:rotate(360deg)}}
+
+/* ---------- Nav-Badge (bald ablaufende Produkte) ---------- */
+.navbadge{margin-left:auto;background:var(--warn-bg);color:var(--warn);font-size:11px;font-weight:700;font-family:var(--mono);border-radius:99px;padding:1px 8px;flex-shrink:0}
 
 /* ---------- Sidebar (desktop) ---------- */
 .sidebar{
@@ -183,7 +195,8 @@ input,select,textarea{font-family:inherit;font-size:15px}
 .empty svg{width:48px;height:48px;opacity:.4;margin-bottom:14px}
 
 /* ---------- FAB ---------- */
-.fab-wrap{position:fixed;right:22px;bottom:22px;display:flex;flex-direction:column;gap:11px;z-index:40}
+.fab-wrap{position:fixed;right:22px;bottom:22px;display:flex;flex-direction:column;gap:11px;z-index:40;transition:transform .25s ease,opacity .25s ease}
+.fab-wrap.fab-hidden{transform:translateY(18px) scale(.9);opacity:0;pointer-events:none}
 .fab{width:54px;height:54px;border-radius:50%;background:var(--acc);color:#06120a;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 22px rgba(74,222,94,.35);transition:.14s}
 .fab:hover{transform:scale(1.06)}
 .fab svg{width:25px;height:25px}
@@ -475,7 +488,8 @@ tbody tr:hover{background:var(--panel2)}
   .sortchips{margin-left:0;width:100%;align-self:stretch}
   /* Bottom-Nav bleibt position:fixed;bottom:0 (bewährt). Milchglas + Safe-Area wie bei iOS-Tab-Bars. */
   .botnav{display:flex;position:fixed;bottom:0;left:0;right:0;background:var(--bg2);background:color-mix(in srgb,var(--bg2) 84%,transparent);backdrop-filter:blur(18px) saturate(160%);-webkit-backdrop-filter:blur(18px) saturate(160%);border-top:1px solid var(--line);z-index:35;padding:8px 4px calc(8px + env(safe-area-inset-bottom,12px))}
-  .botnav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;color:var(--txt3);font-size:10.5px;font-weight:600;min-width:0;transition:color .12s,transform .1s}
+  .botnav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;color:var(--txt3);font-size:10.5px;font-weight:600;min-width:0;transition:color .12s,transform .1s;position:relative}
+  .botnav .navbadge{position:absolute;top:1px;left:calc(50% + 7px);margin:0;padding:1px 6px;font-size:9.5px;background:var(--warn);color:#fff;box-shadow:0 0 0 2px var(--bg2)}
   .botnav button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .botnav button svg{width:22px;height:22px}
   .botnav button.active{color:var(--acc)}
@@ -965,9 +979,12 @@ function fmtDate(d){ const x=new Date(d); return isNaN(x)?'':x.toLocaleDateStrin
 /* =====================================================================
    CHANGELOG — Release-Verlauf für Thomas (neueste zuerst)
    ===================================================================== */
-const APP_VERSION = '2026.08.2';
+const APP_VERSION = '2026.08.3';
 const CHANGELOG = [
   { v:'2026.07', date:'Juli 2026', changes:[
+    'Zum Aktualisieren einfach oben runterziehen (Pull-to-Refresh) — lädt frisch aus der Cloud',
+    'Roter Zähler am Warenverderb-Tab zeigt sofort, wie viele Produkte abgelaufen sind oder bald ablaufen',
+    'Die runden Buttons rechts unten gehen beim Runterscrollen aus dem Weg und kommen beim Hochscrollen zurück',
     'Masken scrollen jetzt sauber: Der Hintergrund bleibt stehen, solange ein Dialog offen ist (gerade auf dem iPhone)',
     'Speichern-Button klebt in der Produktmaske unten — kein Runterscrollen mehr nötig',
     'Suchfeld mit ✕ zum schnellen Leeren · Tab-Wechsel startet oben · kein Auto-Zoom mehr beim Antippen von Feldern (iOS)',
@@ -1001,8 +1018,11 @@ const NAV = [
   {id:'einstellungen', label:'Einstellungen', icon:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>'}
 ];
 function renderNav(){
-  $('nav').innerHTML = NAV.map(n=>`<button class="${view===n.id?'active':''}" onclick="go('${n.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${n.icon}</svg>${n.label}</button>`).join('');
-  $('botnav').innerHTML = NAV.map(n=>`<button class="${view===n.id?'active':''}" onclick="go('${n.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${n.icon}</svg><span>${n.label.split(' ')[0]}</span></button>`).join('');
+  // Badge: Wie viele Produkte sind abgelaufen / laufen bald ab? -> direkt in der Navigation sichtbar.
+  const warnCnt = products.filter(p=>{ const k=mhdStatus(p).key; return k==='expired'||k==='today'||k==='soon'; }).length;
+  const badge = n => (n.id==='verderb' && warnCnt) ? `<span class="navbadge">${warnCnt}</span>` : '';
+  $('nav').innerHTML = NAV.map(n=>`<button class="${view===n.id?'active':''}" onclick="go('${n.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${n.icon}</svg>${n.label}${badge(n)}</button>`).join('');
+  $('botnav').innerHTML = NAV.map(n=>`<button class="${view===n.id?'active':''}" onclick="go('${n.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${n.icon}</svg><span>${n.label.split(' ')[0]}</span>${badge(n)}</button>`).join('');
 }
 function go(v, setFilter){
   const changed = view!==v;
@@ -3070,6 +3090,79 @@ function resumeSync(){
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) resumeSync(); });
 window.addEventListener('online', resumeSync);
 window.addEventListener('focus', resumeSync);
+
+/* ---------- Manueller Refresh (für Pull-to-Refresh) ---------- */
+async function manualRefresh(){
+  if(!USE_CLOUD) return;
+  try{
+    products=await loadProducts(); waste=await loadWaste(); settings=await loadSettings();
+    applyTheme(); render(); toast('Aktualisiert');
+  }catch(e){ toast('Keine Verbindung — später erneut versuchen'); }
+}
+
+/* ---------- Pull-to-Refresh (nur Touch-Geräte im Cloud-Modus) ----------
+   Oben in der Liste nach unten ziehen -> Pfeil dreht sich, ab der Schwelle
+   wird losgelassen und frisch aus der Cloud geladen. Kein Reload nötig. */
+(function(){
+  if(!('ontouchstart' in window) || !USE_CLOUD) return;
+  const el=document.createElement('div');
+  el.className='ptr';
+  el.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>';
+  document.body.appendChild(el);
+  const THRESH=82; let startY=0, pull=0, active=false, busy=false;
+  window.addEventListener('touchstart', e=>{
+    if(busy || window.scrollY>0) return;
+    if($('overlay').classList.contains('show')) return;   // Maske offen -> kein PTR
+    startY=e.touches[0].clientY; active=true; pull=0;
+  }, {passive:true});
+  window.addEventListener('touchmove', e=>{
+    if(!active || busy) return;
+    pull=e.touches[0].clientY-startY;
+    if(pull<=0 || window.scrollY>0){ el.classList.remove('pull'); el.style.transform=''; el.style.opacity=''; return; }
+    if(e.cancelable) e.preventDefault();   // Gummiband/Native-PTR unterdrücken
+    const d=Math.min(pull*0.5, 118);
+    el.classList.add('pull');
+    el.style.opacity=String(Math.min(d/44, 1));
+    el.style.transform=`translateY(${46+d}px) rotate(${Math.min(pull/THRESH,1)*180}deg)`;
+  }, {passive:false});
+  window.addEventListener('touchend', async ()=>{
+    if(!active) return; active=false;
+    el.classList.remove('pull');
+    if(pull>=THRESH){
+      busy=true;
+      el.classList.add('spin');
+      el.style.transform='translateY(112px)';
+      el.style.opacity='1';
+      const t0=Date.now();
+      await manualRefresh();
+      setTimeout(()=>{ el.classList.remove('spin'); el.style.transform=''; el.style.opacity=''; busy=false; }, Math.max(0, 550-(Date.now()-t0)));
+    } else {
+      el.style.transform=''; el.style.opacity='';
+    }
+    pull=0;
+  }, {passive:true});
+})();
+
+/* ---------- FAB versteckt sich beim Runterscrollen (iOS-Muster) ---------- */
+let _fabLastY=0;
+window.addEventListener('scroll', ()=>{
+  if(window.innerWidth>860) return;
+  const f=$('fabwrap'); if(!f || f.style.display==='none') return;
+  const y=window.scrollY;
+  if(y>_fabLastY+6 && y>140) f.classList.add('fab-hidden');
+  else if(y<_fabLastY-6 || y<=140) f.classList.remove('fab-hidden');
+  _fabLastY=y;
+}, {passive:true});
+
+/* ---------- Desktop-Tastenkürzel: "/" fokussiert die Suche, "n" legt ein Produkt an ---------- */
+document.addEventListener('keydown', e=>{
+  if(e.ctrlKey||e.metaKey||e.altKey) return;
+  const t=document.activeElement, tag=t&&t.tagName;
+  if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||(t&&t.isContentEditable)) return;
+  if($('overlay').classList.contains('show')) return;
+  if(e.key==='/'){ const si=$('searchInput'); if(view==='produkte'&&si){ e.preventDefault(); si.focus(); } }
+  else if(e.key==='n'||e.key==='N'){ if(view==='produkte'){ e.preventDefault(); openProduct(null); } }
+});
 /* Sicherheitsnetz: solange die App sichtbar & online ist, alle 20 s leise abgleichen.
    Fängt seltene verpasste Realtime-Events ab -> alles bleibt garantiert aktuell.
    (Greift nicht, wenn ein Modal offen ist — scheduleReload schützt die Eingabe.) */
@@ -3143,6 +3236,12 @@ init();
 /* PWA: Service-Worker registrieren (nur über http/https, nicht bei file://). */
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   window.addEventListener('load', ()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); });
+  // Dezent melden, wenn im Hintergrund eine neue App-Version übernommen wurde.
+  let _hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+    if(_hadController) toast('App im Hintergrund aktualisiert');
+    _hadController = true;
+  });
 }
 </script>
 </body>
