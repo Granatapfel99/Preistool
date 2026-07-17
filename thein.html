@@ -99,7 +99,7 @@ input,select,textarea{font-family:inherit;font-size:15px}
 .toolbar{display:flex;gap:10px;align-items:center;margin-bottom:18px;flex-wrap:wrap}
 .search{flex:1;min-width:200px;position:relative}
 .search svg{position:absolute;left:13px;top:50%;transform:translateY(-50%);width:17px;height:17px;color:var(--txt3)}
-.search input{width:100%;padding:11px 14px 11px 40px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-sm);color:var(--txt);outline:none;transition:.13s}
+.search input{width:100%;padding:11px 42px 11px 40px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-sm);color:var(--txt);outline:none;transition:.13s}
 .search input:focus{border-color:var(--acc-dim);box-shadow:0 0 0 3px rgba(74,222,94,.1)}
 .chips{display:flex;gap:8px;flex-wrap:wrap}
 .chip{padding:8px 13px;background:var(--panel);border:1px solid var(--line);border-radius:99px;font-size:13px;color:var(--txt2);font-weight:500;transition:.13s}
@@ -190,9 +190,9 @@ input,select,textarea{font-family:inherit;font-size:15px}
 .fab.scan{background:var(--panel);color:var(--txt);border:1px solid var(--line2);box-shadow:0 6px 18px rgba(0,0,0,.3)}
 
 /* ---------- Modal ---------- */
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.62);backdrop-filter:blur(4px);z-index:100;display:none;align-items:flex-start;justify-content:center;padding:24px;overflow-y:auto}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.62);backdrop-filter:blur(4px);z-index:100;display:none;align-items:flex-start;justify-content:center;padding:24px;overflow-y:auto;overscroll-behavior:contain}
 .overlay.show{display:flex}
-.modal{background:var(--panel);border:1px solid var(--line2);border-radius:18px;width:100%;max-width:560px;margin:auto;box-shadow:0 24px 70px rgba(0,0,0,.5);animation:pop .18s ease}
+.modal{background:var(--panel);border:1px solid var(--line2);border-radius:18px;width:100%;max-width:560px;margin:auto;box-shadow:0 24px 70px rgba(0,0,0,.5);animation:pop .18s ease;overscroll-behavior:contain}
 @keyframes pop{from{transform:translateY(14px) scale(.98);opacity:0}to{transform:none;opacity:1}}
 .modal-head{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);border-radius:18px 18px 0 0;z-index:2}
 .modal-head h2{font-family:var(--disp);font-size:19px;font-weight:700;margin:0}
@@ -200,6 +200,8 @@ input,select,textarea{font-family:inherit;font-size:15px}
 .x:hover{color:var(--txt);background:var(--line)}
 .x svg{width:18px;height:18px}
 .modal-body{padding:20px 22px}
+/* Sticky Aktionsleiste (Speichern/Löschen) — klebt beim Scrollen am unteren Rand der Maske. */
+.modal-actions{position:sticky;bottom:0;z-index:3;display:flex;gap:10px;margin:18px -22px -20px;padding:13px 22px calc(13px + env(safe-area-inset-bottom,0px));background:var(--panel);border-top:1px solid var(--line);border-radius:0 0 18px 18px;box-shadow:0 -10px 24px -14px rgba(0,0,0,.55)}
 
 /* ---------- Form ---------- */
 .fieldset{margin-bottom:20px}
@@ -322,7 +324,7 @@ tbody tr:hover{background:var(--panel2)}
 .verderb-search>svg{position:absolute;left:13px;width:18px;height:18px;color:var(--txt3);pointer-events:none}
 .verderb-search input{width:100%;padding:11px 40px 11px 40px;background:var(--panel);border:1px solid var(--line);border-radius:11px;color:var(--txt);font-size:14px}
 .verderb-search input:focus{border-color:var(--acc);outline:none}
-.vs-clear{position:absolute;right:8px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;color:var(--txt3);border-radius:7px}
+.vs-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:30px;height:30px;display:flex;align-items:center;justify-content:center;color:var(--txt3);border-radius:7px}
 .vs-clear:hover{color:var(--txt);background:var(--panel2)}
 .vs-clear svg{width:16px;height:16px}
 .katmanage{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:var(--radius-sm);overflow:hidden}
@@ -448,6 +450,9 @@ tbody tr:hover{background:var(--panel2)}
   .topbar .brand-logo{width:32px;height:32px}
   .topbar .brand-txt b{font-size:16px}
   .content{padding:18px 16px 110px}
+  /* 16px verhindert den automatischen iOS-Zoom beim Antippen von Eingabefeldern. */
+  input,select,textarea{font-size:16px}
+  .tablewrap{-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
   .page-head h1{font-size:23px}
   .grid{grid-template-columns:1fr}
   .fgrid{grid-template-columns:1fr}
@@ -480,13 +485,17 @@ tbody tr:hover{background:var(--panel2)}
   .modal-head{border-radius:18px 18px 0 0;padding-top:26px}
   /* Grabber-Griff oben am Sheet — vertrautes iOS-Muster. */
   .modal-head:before{content:"";position:absolute;top:9px;left:50%;transform:translateX(-50%);width:38px;height:4px;border-radius:99px;background:var(--line2)}
-  .modal-body{padding-bottom:calc(20px + env(safe-area-inset-bottom,0px))}
+  .modal-actions{border-radius:0}
   /* Bulk-Leiste auf Mobile: volle Breite direkt ÜBER der Navigation, nichts überlappt. */
   .bulkbar{left:0;right:0;bottom:calc(64px + env(safe-area-inset-bottom,12px));transform:none;width:100%;max-width:none;border-radius:14px 14px 0 0;border-left:none;border-right:none;border-bottom:none;flex-direction:column;align-items:stretch;gap:9px;padding:12px 14px}
   .bulk-count{text-align:center}
   .bulk-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .bulk-actions .btn{justify-content:center;width:100%}
   .bulk-actions .btn-danger{grid-column:1 / -1}
+}
+/* Nutzer mit reduzierter Bewegung: Animationen & Übergänge abschalten. */
+@media (prefers-reduced-motion:reduce){
+  *,*:before,*:after{animation:none!important;transition:none!important}
 }
 </style>
 </head>
@@ -956,9 +965,12 @@ function fmtDate(d){ const x=new Date(d); return isNaN(x)?'':x.toLocaleDateStrin
 /* =====================================================================
    CHANGELOG — Release-Verlauf für Thomas (neueste zuerst)
    ===================================================================== */
-const APP_VERSION = '2026.08.1';
+const APP_VERSION = '2026.08.2';
 const CHANGELOG = [
   { v:'2026.07', date:'Juli 2026', changes:[
+    'Masken scrollen jetzt sauber: Der Hintergrund bleibt stehen, solange ein Dialog offen ist (gerade auf dem iPhone)',
+    'Speichern-Button klebt in der Produktmaske unten — kein Runterscrollen mehr nötig',
+    'Suchfeld mit ✕ zum schnellen Leeren · Tab-Wechsel startet oben · kein Auto-Zoom mehr beim Antippen von Feldern (iOS)',
     'Mobil-Feinschliff: Übersicht passt sich sauber an schmale Bildschirme an — nichts läuft mehr über den Rand',
     'Navigationsleiste, Kopfzeile & Dialoge im iOS-Stil (Milchglas-Effekt, Grabber am Sheet)',
     'Sorgenkinder-Liste aufgeräumt: Marge rechts auf einen Blick, Warnhinweise kompakt in der Unterzeile',
@@ -993,9 +1005,11 @@ function renderNav(){
   $('botnav').innerHTML = NAV.map(n=>`<button class="${view===n.id?'active':''}" onclick="go('${n.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${n.icon}</svg><span>${n.label.split(' ')[0]}</span></button>`).join('');
 }
 function go(v, setFilter){
+  const changed = view!==v;
   view=v;
   if(setFilter){ filter.abweichung=false; filter.dupes=false; filter.unvollstaendig=false; filter.kat=''; filter[setFilter]=true; }
   render();
+  if(changed) window.scrollTo(0,0);   // frische Seite -> oben starten
 }
 
 /* =====================================================================
@@ -1151,7 +1165,8 @@ function renderProdukte(){
     </div>
     <div class="toolbar">
       <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-        <input id="searchInput" placeholder="Produkt, Marke oder Kategorie suchen…" value="${esc(search)}"></div>
+        <input id="searchInput" placeholder="Produkt, Marke oder Kategorie suchen…" value="${esc(search)}">
+        <button type="button" class="vs-clear" id="searchClear" style="display:${search?'flex':'none'}" title="Suche leeren" onclick="clearProductSearch()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
       <select class="selstyle" id="katFilter">
         <option value="">Alle Kategorien</option>
         ${kats.map(k=>`<option value="${esc(k)}" ${filter.kat===k?'selected':''}>${esc(k)}</option>`).join('')}
@@ -1182,7 +1197,7 @@ function renderProdukte(){
     <div id="prodList">${renderItems(list, dupes)}</div>
   `;
   const si = $('searchInput');
-  si.oninput = ()=>{ search=si.value; lightRenderProducts(); };
+  si.oninput = ()=>{ search=si.value; lightRenderProducts(); const cb=$('searchClear'); if(cb) cb.style.display = search ? 'flex' : 'none'; };
   $('katFilter').onchange = e=>{ filter.kat=e.target.value; render(); };
   $('sort1').onchange = e=>{
     sort1=e.target.value;
@@ -1208,6 +1223,12 @@ function renderItems(list, dupes){
   return selBar + items;
 }
 function lightRenderProducts(){ const d=duplicateIds(); const c=$('prodList'); if(c) c.innerHTML = renderItems(getVisibleProducts(d), d); }
+function clearProductSearch(){
+  search='';
+  const si=$('searchInput'); if(si){ si.value=''; si.focus(); }
+  const cb=$('searchClear'); if(cb) cb.style.display='none';
+  lightRenderProducts();
+}
 function setViewMode(m){ if(viewMode===m) return; viewMode=m; saveViewPrefs(); $('vGrid')&&$('vGrid').classList.toggle('on',m==='grid'); $('vList')&&$('vList').classList.toggle('on',m==='list'); lightRenderProducts(); }
 function toggleSortDir(){ sort1dir = sort1dir==='asc'?'desc':'asc'; saveViewPrefs(); const b=$('sortDir'); if(b)b.textContent=sort1dir==='asc'?'↑':'↓'; lightRenderProducts(); }
 function cardHtml(p, isDupe){
@@ -1485,7 +1506,7 @@ function openProduct(id, prefill){
         </div>
       </details>
 
-      <div style="display:flex;gap:10px;margin-top:4px">
+      <div class="modal-actions">
         ${!isNew?`<button class="btn btn-danger" onclick="delProduct('${p.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>`:''}
         <button class="btn btn-acc" style="flex:1;justify-content:center" onclick="saveProduct('${id||''}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6 9 17l-5-5"/></svg>${isNew?'Anlegen':'Speichern'}</button>
       </div>
@@ -1493,6 +1514,8 @@ function openProduct(id, prefill){
   showModal();
   if($('f_geb') && $('f_geb').checked){ const rf=$('f_roh'); if(rf){ rf.readOnly=true; rf.style.opacity='.6'; } const rh=$('rohHint'); if(rh) rh.textContent='wird aus Gebinde berechnet'; }
   liveCalc();
+  // Desktop: direkt lostippen können. Mobil bewusst nicht (Tastatur würde das Sheet verdecken).
+  if(isNew && window.matchMedia('(min-width:861px)').matches){ const nf=$('f_name'); if(nf) nf.focus(); }
 }
 function readForm(){
   const hasMhd = $('f_hasmhd') ? $('f_hasmhd').checked : true;   // default: hat MHD
@@ -2979,10 +3002,33 @@ function wipe(){ if(!confirm('Wirklich ALLE Produkte, Verderb-Daten und Einstell
 /* =====================================================================
    THEME / MODAL / INIT
    ===================================================================== */
-function applyTheme(){ document.body.dataset.theme=settings.theme; const b=$('themeBtnM'); if(b)b.textContent=settings.theme==='dark'?'🌙':'☀️'; }
+function applyTheme(){
+  document.body.dataset.theme=settings.theme;
+  const b=$('themeBtnM'); if(b)b.textContent=settings.theme==='dark'?'🌙':'☀️';
+  // Browser-/PWA-Statusleiste passend einfärben (iOS & Android).
+  const m=document.querySelector('meta[name="theme-color"]');
+  if(m) m.setAttribute('content', settings.theme==='dark' ? '#0d0f0d' : '#f4f6f4');
+}
 function toggleTheme(){ settings.theme=settings.theme==='dark'?'light':'dark'; setLocalTheme(settings.theme); localSet('thein_settings',settings); applyTheme(); }
-function showModal(){ $('overlay').classList.add('show'); document.body.style.overflow='hidden'; }
-function closeModal(){ $('overlay').classList.remove('show'); document.body.style.overflow=''; }
+/* Body-Scroll-Lock, iOS-fest: overflow:hidden ignoriert iOS beim Touch-Scrollen.
+   Stattdessen wird der Body fixiert und die Scrollposition gemerkt/wiederhergestellt.
+   -> Bei offener Maske scrollt IMMER nur die Maske, nie die Ebene darunter. */
+let _lockY = 0, _scrollLocked = false;
+function lockBodyScroll(){
+  if(_scrollLocked) return; _scrollLocked = true;
+  _lockY = window.scrollY || document.documentElement.scrollTop || 0;
+  const b = document.body;
+  b.style.position='fixed'; b.style.top=`-${_lockY}px`;
+  b.style.left='0'; b.style.right='0'; b.style.width='100%';
+}
+function unlockBodyScroll(){
+  if(!_scrollLocked) return; _scrollLocked = false;
+  const b = document.body;
+  b.style.position=''; b.style.top=''; b.style.left=''; b.style.right=''; b.style.width='';
+  window.scrollTo(0, _lockY);
+}
+function showModal(){ $('overlay').classList.add('show'); lockBodyScroll(); }
+function closeModal(){ $('overlay').classList.remove('show'); unlockBodyScroll(); }
 $('overlay').addEventListener('click',e=>{ if(e.target===$('overlay')){ stopCam(); closeModal(); } });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ stopCam(); closeModal(); } });
 document.addEventListener('click',e=>{ if($('katPanel') && !e.target.closest('.katcombo') && !e.target.closest('.katpanel')) closeKatPanel(); }, true);
