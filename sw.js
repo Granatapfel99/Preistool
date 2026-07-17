@@ -3,7 +3,7 @@
    Netzausfall startet. Live-Daten (Supabase) werden NIE gecacht.
    HTML wird "network-first" geladen -> neue Versionen landen automatisch,
    ohne dass man die App manuell neu installieren muss. */
-const CACHE = 'thein-v22';
+const CACHE = 'thein-v23';
 const SHELL = ['thein.html', 'manifest.json', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {

@@ -371,11 +371,12 @@ tbody tr:hover{background:var(--panel2)}
 .dashrow:hover{background:var(--panel2)}
 .dashrow-main{flex:1;min-width:0}
 .dashrow-name{font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dashrow-sub{font-size:11.5px;color:var(--txt3)}
-.dashrow-tags{display:flex;gap:5px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end}
+.dashrow-sub{font-size:11.5px;color:var(--txt3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dashrow-tags{display:flex;gap:5px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;max-width:46%}
 .dashbars{display:flex;flex-direction:column;gap:11px}
-.dashbar-top{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px}
-.dashbar-cnt{font-family:var(--mono);color:var(--txt2)}
+.dashbar-top{display:flex;justify-content:space-between;gap:8px;font-size:13px;margin-bottom:4px}
+.dashbar-top span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.dashbar-cnt{font-family:var(--mono);color:var(--txt2);flex-shrink:0}
 .dashbar-track{height:8px;background:var(--bg2);border-radius:99px;overflow:hidden}
 .dashbar-fill{height:100%;background:var(--acc);border-radius:99px;transition:width .3s}
 /* EAN-Feld mit Scan-/Lookup-Buttons */
@@ -1415,13 +1416,13 @@ function openProduct(id, prefill){
         </div>
       </fieldset>
 
-      <fieldset class="fieldset" style="border:none;padding:0;margin:0 0 20px"><legend>Verkauf & Status</legend><div class="fgrid">
+      <fieldset class="fieldset" style="border:none;padding:0;margin:0 0 20px"><legend>Verkauf & Status</legend>
+        <div class="inline-toggle" style="margin-bottom:12px"><label class="switch"><input type="checkbox" id="f_hasmhd" ${g('kein_mhd')?'':'checked'} onchange="toggleHasMhd()"><span class="slider"></span></label><span>Produkt hat ein MHD <span class="hint">(aus für lange haltbare Artikel wie Liquids)</span></span></div>
+        <div class="fgrid">
         <div class="field"><label>Preisschild (€) <span class="hint">leer = Vorschlag</span></label><input id="f_schild" type="text" inputmode="decimal" value="${g('preisschild','')}" oninput="liveCalc()"></div>
         <div class="field"><label>Aktionspreis (€) <span class="hint">optional</span></label><input id="f_aktion" type="text" inputmode="decimal" value="${g('aktionspreis','')}" oninput="liveCalc()"></div>
-        <div class="field"><label>MHD <span class="req" id="mhdReq" ${g('kein_mhd')?'style="display:none"':''}>*Pflicht</span></label>
-          <input id="f_mhd" type="date" value="${mhdISO(g('mhd',''))}" ${g('kein_mhd')?'disabled style="opacity:.4"':''}>
-          <label class="mhd-toggle"><input type="checkbox" id="f_keinmhd" ${g('kein_mhd')?'checked':''} onchange="toggleKeinMhd()"> Lange haltbar / kein MHD nötig</label>
-        </div>
+        <div class="field" id="mhdField" style="display:${g('kein_mhd')?'none':''}"><label>MHD <span class="req">*Pflicht</span></label>
+          <input id="f_mhd" type="date" value="${mhdISO(g('mhd',''))}"></div>
         <div class="field"><label>Beliebtheit</label><select id="f_bel"><option ${g('beliebtheit','keine Angabe')==='keine Angabe'?'selected':''}>keine Angabe</option><option ${g('beliebtheit')==='niedrig'?'selected':''}>niedrig</option><option ${g('beliebtheit')==='mittel'?'selected':''}>mittel</option><option ${g('beliebtheit')==='hoch'?'selected':''}>hoch</option></select></div>
       </div></fieldset>
 
@@ -1462,7 +1463,8 @@ function openProduct(id, prefill){
   liveCalc();
 }
 function readForm(){
-  const keinMhd = $('f_keinmhd') ? $('f_keinmhd').checked : false;
+  const hasMhd = $('f_hasmhd') ? $('f_hasmhd').checked : true;   // default: hat MHD
+  const keinMhd = !hasMhd;
   return {
     name:$('f_name').value.trim(), kategorie:$('f_kat').value.trim(), ean:$('f_ean').value.trim(),
     rohpreis:num($('f_roh').value), netto_brutto:$('f_nb').value, mwst_ek:num($('f_mwstek').value),
@@ -1480,12 +1482,13 @@ function readForm(){
     gebinde_stueck:$('f_gebstk')&&$('f_gebstk').value.trim()!==''?num($('f_gebstk').value):''
   };
 }
-/* „Lange haltbar"-Schalter: MHD-Feld deaktivieren + Pflicht-Markierung ausblenden. */
-function toggleKeinMhd(){
-  const on=$('f_keinmhd').checked;
-  const inp=$('f_mhd'), req=$('mhdReq');
-  if(inp){ inp.disabled=on; inp.style.opacity=on?'.4':''; if(on) inp.value=''; }
-  if(req) req.style.display=on?'none':'';
+/* MHD-Toggle: an = Produkt hat ein MHD (Feld sichtbar + Pflicht),
+   aus = lange haltbar (Feld weg, keine Pflicht). Default an. */
+function toggleHasMhd(){
+  const hasMhd = $('f_hasmhd').checked;
+  const field = $('mhdField');
+  if(field) field.style.display = hasMhd ? '' : 'none';
+  if(!hasMhd){ const inp=$('f_mhd'); if(inp) inp.value=''; }
 }
 function togglePfand(){ const on=$('f_pfandakt').checked; $('pfandBox').style.display=on?'grid':'none'; liveCalc(); }
 function toggleGebinde(){
