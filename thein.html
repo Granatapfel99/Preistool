@@ -367,12 +367,13 @@ tbody tr:hover{background:var(--panel2)}
 .dashcard h3{margin:0 0 14px;font-size:15px}
 .dashcard-sub{font-size:12px;color:var(--txt3);font-weight:400;margin-left:6px}
 .dashlist{display:flex;flex-direction:column;gap:2px}
-.dashrow{display:flex;align-items:center;gap:10px;padding:9px 8px;border-radius:var(--radius-sm);cursor:pointer;transition:.1s}
+.dashrow{display:flex;align-items:center;gap:8px;padding:9px 8px;border-radius:var(--radius-sm);cursor:pointer;transition:.1s}
 .dashrow:hover{background:var(--panel2)}
-.dashrow-main{flex:1;min-width:0}
+.dashrow-main{flex:1 1 auto;min-width:0}
 .dashrow-name{font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dashrow-sub{font-size:11.5px;color:var(--txt3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dashrow-tags{display:flex;gap:5px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;max-width:46%}
+.dashrow-tags{display:flex;gap:5px;flex:0 0 auto;flex-wrap:wrap;justify-content:flex-end;max-width:55%}
+.dashrow-tags .tag{font-size:10.5px;padding:2px 7px;white-space:nowrap}
 .dashbars{display:flex;flex-direction:column;gap:11px}
 .dashbar-top{display:flex;justify-content:space-between;gap:8px;font-size:13px;margin-bottom:4px}
 .dashbar-top span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
