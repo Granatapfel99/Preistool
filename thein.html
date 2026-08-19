@@ -285,6 +285,8 @@ body{overscroll-behavior-y:contain}
 .calc-row b{font-family:var(--mono);font-weight:600;font-size:14px}
 .calc-bonus{grid-column:1/-1;margin-top:6px;padding:9px 11px;background:rgba(74,222,94,.12);border:1px solid var(--acc-dim);border-radius:var(--radius-sm);display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:13px}
 .calc-bonus b{color:var(--acc);font-family:var(--mono)}
+.calc-bonus.is-minus{background:var(--warn-bg);border-color:var(--warn)}
+.calc-bonus.is-minus b{color:var(--warn)}
 .calc-hero{grid-column:1/-1;border-top:1px solid var(--line);margin-top:5px;padding-top:11px;display:flex;justify-content:space-between;align-items:center;gap:12px}
 .calc-hero .lbl{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--txt2);font-family:var(--mono);min-width:0}
 .calc-hero .val{font-family:var(--mono);font-weight:600;font-size:30px;letter-spacing:-1px;color:var(--acc);white-space:nowrap;flex-shrink:0}
@@ -1295,7 +1297,9 @@ function cardHtml(p, isDupe){
     <div class="card-row">
       ${c.abweichung ? `<span class="tag tag-warn">⚠ unter Vorschlag</span>` : `<span class="tag tag-ok">✓ Vorschlag</span>`}
       ${c.aktion ? `<span class="tag tag-action">Aktion</span>`:''}
-      ${c.rabattAktiv ? `<span class="tag tag-rabatt">Rabatt-EK −${c.rabattProzent.toFixed(0)} %</span>`:''}
+      ${c.rabattAktiv ? (c.rabattProzent>=0
+        ? `<span class="tag tag-rabatt">Rabatt-EK −${c.rabattProzent.toFixed(0)} %</span>`
+        : `<span class="tag tag-warn">EK +${Math.abs(c.rabattProzent).toFixed(0)} %</span>`):''}
       <span class="tag tag-mut">Gewinn ${eur(c.gewinn)} €</span>
     </div>
     <div class="card-meta">${mhdHtml}<span>EK ${eur(c.ekBrutto)} €</span></div>
@@ -1315,7 +1319,7 @@ function rowHtml(p, isDupe){
   return `<div class="prow${isDupe?' is-dupe':''}" onclick="openProduct('${p.id}')">
     <div class="prow-main">
       <div class="prow-name">${esc(p.name||'(ohne Name)')}${isDupe?' <span class="dupe-tag">Duplikat</span>':''}</div>
-      <div class="prow-sub">${esc(p.kategorie||'—')}${p.kein_mhd?` · <span style="color:var(--txt3)">ohne MHD</span>`:(p.mhd?` · <span class="${st.key==='soon'||st.key==='today'||st.key==='expired'?'mhd-soon':''}">MHD ${new Date(p.mhd).toLocaleDateString('de-DE')}</span>`:'')}${c.rabattAktiv?` · <span style="color:var(--acc)">Rabatt-EK −${c.rabattProzent.toFixed(0)} %</span>`:''}</div>
+      <div class="prow-sub">${esc(p.kategorie||'—')}${p.kein_mhd?` · <span style="color:var(--txt3)">ohne MHD</span>`:(p.mhd?` · <span class="${st.key==='soon'||st.key==='today'||st.key==='expired'?'mhd-soon':''}">MHD ${new Date(p.mhd).toLocaleDateString('de-DE')}</span>`:'')}${c.rabattAktiv?(c.rabattProzent>=0?` · <span style="color:var(--acc)">Rabatt-EK −${c.rabattProzent.toFixed(0)} %</span>`:` · <span style="color:var(--warn)">EK +${Math.abs(c.rabattProzent).toFixed(0)} %</span>`):''}</div>
     </div>
     <div class="prow-db">Gewinn ${eur(c.gewinn)} €</div>
     <div class="prow-price">${c.abweichung?`<span class="tag tag-warn" style="margin-right:7px">⚠</span>`:''}${eur(c.verkauf)} €</div>
@@ -1655,9 +1659,21 @@ function liveCalc(){
   // Hinweiszeile unter den Rabattfeldern
   const rh=$('rabHint');
   if(rh){
-    if(c.rabattAktiv && c.ekBruttoReg>0)
-      rh.innerHTML = `<b>${eur(c.ekBrutto)} €</b> statt ${eur(c.ekBruttoReg)} € brutto &nbsp;·&nbsp; <b>${c.rabattProzent.toFixed(1).replace('.',',')} %</b> günstiger`;
-    else rh.textContent='Aktions-EK oder Rabatt-% eingeben…';
+    if(c.rabattAktiv && c.ekBruttoReg>0){
+      const pct=c.rabattProzent;
+      const pctTxt=Math.abs(pct).toFixed(1).replace('.',',');
+      if(pct >= 0.05){
+        rh.style.color=''; rh.style.borderColor='';
+        rh.innerHTML = `<b>${eur(c.ekBrutto)} €</b> statt ${eur(c.ekBruttoReg)} € brutto &nbsp;·&nbsp; <b>${pctTxt} %</b> günstiger`;
+      } else if(pct <= -0.05){
+        rh.style.color='var(--warn)'; rh.style.borderColor='var(--warn)';
+        rh.innerHTML = `⚠ <b>${eur(c.ekBrutto)} €</b> statt ${eur(c.ekBruttoReg)} € brutto — das ist <b>${pctTxt} % teurer</b>, kein Rabatt. Rohpreis und Aktions-EK vertauscht?`;
+      } else {
+        rh.style.color=''; rh.style.borderColor='';
+        rh.innerHTML = `Aktions-EK entspricht dem Rohpreis — kein Rabatt.`;
+      }
+    }
+    else { rh.style.color=''; rh.style.borderColor=''; rh.textContent='Aktions-EK oder Rabatt-% eingeben…'; }
   }
   $('calcBox').innerHTML = `<div class="calc-grid">
     ${c.rabattAktiv?`
@@ -1677,7 +1693,9 @@ function liveCalc(){
     <div class="calc-row"><span>Marge</span><b class="${c.margeNetto>=0?'pos':'neg'}">${c.margeNetto.toFixed(0)} %</b></div>
     <div class="calc-row"><span>Aufschlag a. EK</span><b class="${c.aufschlag>=num(p.marge_soll)-0.5?'pos':''}">${c.aufschlag.toFixed(0)} %</b></div>
     ${c.rabattAktiv?`<div class="calc-row"><span>USt. / Stück</span><b>${eur(c.ustAnteil)} €</b></div>
-    <div class="calc-bonus"><span>Zusatzgewinn durch Rabatt</span><b>+${eur(c.zusatzGewinn)} € / Stück</b></div>`:''}
+    ${c.zusatzGewinn>=0
+      ? `<div class="calc-bonus"><span>Zusatzgewinn durch Rabatt</span><b>+${eur(c.zusatzGewinn)} € / Stück</b></div>`
+      : `<div class="calc-bonus is-minus"><span>Mehrkosten ggü. Normalpreis</span><b>${eur(c.zusatzGewinn)} € / Stück</b></div>`}`:''}
     <div class="calc-hero"><span class="lbl">Preisvorschlag (aufgerundet)</span><span class="val">${eur(c.gerundet)} €</span></div>
     ${c.rabattAktiv?`<div class="calc-row" style="grid-column:1/-1;color:var(--txt3);font-size:12px">Vorschlag basiert bewusst auf dem <b>regulären</b> Rohpreis — der Verkaufspreis bleibt stabil.</div>`:''}
     ${c.abweichung?`<div class="calc-row" style="grid-column:1/-1;color:var(--warn)">⚠ Verkaufspreis ${eur(c.vkBrutto)} € liegt unter dem Vorschlag ${eur(c.gerundet)} €</div>`:''}
