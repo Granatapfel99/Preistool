@@ -1500,7 +1500,7 @@ function openProduct(id, prefill){
         <div class="field"><label>MwSt. Einkauf</label><select id="f_mwstek" onchange="liveCalc()"><option value="7" ${num(g('mwst_ek',settings.default_mwst))==7?'selected':''}>7 %</option><option value="19" ${num(g('mwst_ek',settings.default_mwst))==19?'selected':''}>19 %</option></select></div>
         <div class="field"><label>Soll-Marge (%)</label><input id="f_marge" type="text" inputmode="decimal" value="${g('marge_soll',settings.default_marge)}" oninput="liveCalc()"></div>
       </div>
-      <div class="inline-toggle" style="margin-top:12px"><label class="switch"><input type="checkbox" id="f_rabakt" ${p.rabatt_aktiv?'checked':''} onchange="toggleRabatt()"><span class="slider"></span></label><span>Rabattierter Einkauf <span class="hint">(Aktions-EK — Verkaufspreis bleibt gleich)</span></span></div>
+      <div class="inline-toggle" style="margin-top:12px"><label class="switch"><input type="checkbox" id="f_rabakt" ${p.rabatt_aktiv?'checked':''} onchange="toggleRabatt()"><span class="slider"></span></label><span>Rabattierter Einkauf</span></div>
       <div class="fgrid" id="rabBox" style="display:${p.rabatt_aktiv?'grid':'none'};margin-top:12px">
         <div class="field"><label>Aktions-EK (€) <span class="hint">pro Stück</span></label><input id="f_rohakt" type="text" inputmode="decimal" value="${g('rohpreis_aktion','')}" oninput="onRabattEuro()"></div>
         <div class="field"><label>Rabatt (%) <span class="hint">alternativ</span></label><input id="f_rabpct" type="text" inputmode="decimal" value="" oninput="onRabattProzent()"></div>
