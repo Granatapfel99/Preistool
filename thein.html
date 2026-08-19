@@ -170,6 +170,7 @@ body{overscroll-behavior-y:contain}
 .tag-warn{background:var(--warn-bg);color:var(--warn)}
 .tag-mut{background:var(--panel2);color:var(--txt3)}
 .tag-action{background:rgba(91,157,255,.13);color:var(--blue)}
+.tag-rabatt{background:rgba(74,222,94,.13);color:var(--acc)}
 .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .dot-on{background:var(--acc);box-shadow:0 0 7px var(--acc)}
 .dot-off{background:var(--txt3)}
@@ -282,6 +283,8 @@ body{overscroll-behavior-y:contain}
 .calc-row{display:flex;justify-content:space-between;align-items:baseline;font-size:13px}
 .calc-row span{color:var(--txt2)}
 .calc-row b{font-family:var(--mono);font-weight:600;font-size:14px}
+.calc-bonus{grid-column:1/-1;margin-top:6px;padding:9px 11px;background:rgba(74,222,94,.12);border:1px solid var(--acc-dim);border-radius:var(--radius-sm);display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:13px}
+.calc-bonus b{color:var(--acc);font-family:var(--mono)}
 .calc-hero{grid-column:1/-1;border-top:1px solid var(--line);margin-top:5px;padding-top:11px;display:flex;justify-content:space-between;align-items:center;gap:12px}
 .calc-hero .lbl{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--txt2);font-family:var(--mono);min-width:0}
 .calc-hero .val{font-family:var(--mono);font-weight:600;font-size:30px;letter-spacing:-1px;color:var(--acc);white-space:nowrap;flex-shrink:0}
@@ -918,16 +921,27 @@ function runUndo(){ const fn=_undoFn; _undoFn=null; const t=$('toast'); t.classL
 function rechnePreis(p){
   const mwstEk = num(p.mwst_ek ?? settings.default_mwst);
   const roh = num(p.rohpreis);
+  // REGULÄRER EK (Listenpreis) -> Basis für Preisvorschlag. Bleibt vom Rabatt unberührt,
+  // damit der Automatenpreis stabil bleibt, auch wenn mal günstiger eingekauft wird.
+  let ekNettoReg, ekBruttoReg;
+  if((p.netto_brutto||'brutto') === 'brutto'){ ekBruttoReg = roh; ekNettoReg = roh/(1+mwstEk/100); }
+  else { ekNettoReg = roh; ekBruttoReg = roh*(1+mwstEk/100); }
+
+  // EFFEKTIVER EK = was tatsächlich gezahlt wurde. Treibt Gewinn/Marge UND den
+  // Warenverderb-Wert (steuerlich zählen die echten Anschaffungskosten).
+  const rabattAktiv = !!p.rabatt_aktiv && p.rohpreis_aktion!=null && p.rohpreis_aktion!=='';
+  const rohEff = rabattAktiv ? num(p.rohpreis_aktion) : roh;
   let ekNetto, ekBrutto;
-  if((p.netto_brutto||'brutto') === 'brutto'){ ekBrutto = roh; ekNetto = roh/(1+mwstEk/100); }
-  else { ekNetto = roh; ekBrutto = roh*(1+mwstEk/100); }
+  if((p.netto_brutto||'brutto') === 'brutto'){ ekBrutto = rohEff; ekNetto = rohEff/(1+mwstEk/100); }
+  else { ekNetto = rohEff; ekBrutto = rohEff*(1+mwstEk/100); }
 
   // Pfand nur wenn aktiviert; steuerneutraler Durchlaufposten.
   const pfand = p.pfand_aktiv ? num(p.pfand_betrag) : 0;
 
   const margeSoll = num(p.marge_soll ?? settings.default_marge);
   const mwstVk = num(p.mwst_vk ?? mwstEk);
-  const wunschNetto  = ekNetto*(1+margeSoll/100);
+  // Preisvorschlag bewusst aus dem REGULÄREN EK.
+  const wunschNetto  = ekNettoReg*(1+margeSoll/100);
   const wunschBrutto = wunschNetto*(1+mwstVk/100) + pfand;
 
   // AUFrunden auf Rundungsstufe (1e-9 fängt Float-Ungenauigkeit ab).
@@ -941,7 +955,10 @@ function rechnePreis(p){
 
   // Rückrechnung auf netto (Pfand vorher abziehen).
   const vkNetto = (vkBrutto - pfand)/(1+mwstVk/100);
-  const gewinn = vkNetto - ekNetto;
+  const gewinn = vkNetto - ekNetto;                     // Gewinn mit tatsächlichem EK
+  const gewinnReg = vkNetto - ekNettoReg;               // Gewinn zum Normal-EK (Referenz)
+  const zusatzGewinn = gewinn - gewinnReg;              // Plus durch den Rabatt
+  const rabattProzent = ekBruttoReg>0 ? (1 - ekBrutto/ekBruttoReg)*100 : 0;
   const margeNetto = vkNetto>0 ? gewinn/vkNetto*100 : 0;
   const aufschlag  = ekNetto>0 ? gewinn/ekNetto*100 : 0;
   const ustAnteil  = vkBrutto - pfand - vkNetto;
@@ -953,6 +970,8 @@ function rechnePreis(p){
     ekNetto, ekBrutto, vkNetto, vkBrutto, gerundet, verkauf:vkBrutto,
     schild: schildVal!=null?schildVal:gerundet, pfand,
     gewinn, margeNetto, aufschlag, ustAnteil, abweichung, aktion:aktion!=null,
+    // Rabattierter Einkauf (Aktions-EK):
+    ekNettoReg, ekBruttoReg, gewinnReg, zusatzGewinn, rabattProzent, rabattAktiv,
     // rückwärtskompatibel (alte Namen, die anderswo noch genutzt werden):
     endNetto:wunschNetto, endBrutto:wunschBrutto, deckungsbeitrag:gewinn, margeIst:aufschlag
   };
@@ -1276,6 +1295,7 @@ function cardHtml(p, isDupe){
     <div class="card-row">
       ${c.abweichung ? `<span class="tag tag-warn">⚠ unter Vorschlag</span>` : `<span class="tag tag-ok">✓ Vorschlag</span>`}
       ${c.aktion ? `<span class="tag tag-action">Aktion</span>`:''}
+      ${c.rabattAktiv ? `<span class="tag tag-rabatt">Rabatt-EK −${c.rabattProzent.toFixed(0)} %</span>`:''}
       <span class="tag tag-mut">Gewinn ${eur(c.gewinn)} €</span>
     </div>
     <div class="card-meta">${mhdHtml}<span>EK ${eur(c.ekBrutto)} €</span></div>
@@ -1295,7 +1315,7 @@ function rowHtml(p, isDupe){
   return `<div class="prow${isDupe?' is-dupe':''}" onclick="openProduct('${p.id}')">
     <div class="prow-main">
       <div class="prow-name">${esc(p.name||'(ohne Name)')}${isDupe?' <span class="dupe-tag">Duplikat</span>':''}</div>
-      <div class="prow-sub">${esc(p.kategorie||'—')}${p.kein_mhd?` · <span style="color:var(--txt3)">ohne MHD</span>`:(p.mhd?` · <span class="${st.key==='soon'||st.key==='today'||st.key==='expired'?'mhd-soon':''}">MHD ${new Date(p.mhd).toLocaleDateString('de-DE')}</span>`:'')}</div>
+      <div class="prow-sub">${esc(p.kategorie||'—')}${p.kein_mhd?` · <span style="color:var(--txt3)">ohne MHD</span>`:(p.mhd?` · <span class="${st.key==='soon'||st.key==='today'||st.key==='expired'?'mhd-soon':''}">MHD ${new Date(p.mhd).toLocaleDateString('de-DE')}</span>`:'')}${c.rabattAktiv?` · <span style="color:var(--acc)">Rabatt-EK −${c.rabattProzent.toFixed(0)} %</span>`:''}</div>
     </div>
     <div class="prow-db">Gewinn ${eur(c.gewinn)} €</div>
     <div class="prow-price">${c.abweichung?`<span class="tag tag-warn" style="margin-right:7px">⚠</span>`:''}${eur(c.verkauf)} €</div>
@@ -1479,6 +1499,12 @@ function openProduct(id, prefill){
         <div class="field"><label>Roh ist…</label><select id="f_nb" onchange="liveCalc()"><option value="brutto" ${g('netto_brutto','brutto')==='brutto'?'selected':''}>brutto</option><option value="netto" ${g('netto_brutto')==='netto'?'selected':''}>netto</option></select></div>
         <div class="field"><label>MwSt. Einkauf</label><select id="f_mwstek" onchange="liveCalc()"><option value="7" ${num(g('mwst_ek',settings.default_mwst))==7?'selected':''}>7 %</option><option value="19" ${num(g('mwst_ek',settings.default_mwst))==19?'selected':''}>19 %</option></select></div>
         <div class="field"><label>Soll-Marge (%)</label><input id="f_marge" type="text" inputmode="decimal" value="${g('marge_soll',settings.default_marge)}" oninput="liveCalc()"></div>
+      </div>
+      <div class="inline-toggle" style="margin-top:12px"><label class="switch"><input type="checkbox" id="f_rabakt" ${p.rabatt_aktiv?'checked':''} onchange="toggleRabatt()"><span class="slider"></span></label><span>Rabattierter Einkauf <span class="hint">(Aktions-EK — Verkaufspreis bleibt gleich)</span></span></div>
+      <div class="fgrid" id="rabBox" style="display:${p.rabatt_aktiv?'grid':'none'};margin-top:12px">
+        <div class="field"><label>Aktions-EK (€) <span class="hint">pro Stück</span></label><input id="f_rohakt" type="text" inputmode="decimal" value="${g('rohpreis_aktion','')}" oninput="onRabattEuro()"></div>
+        <div class="field"><label>Rabatt (%) <span class="hint">alternativ</span></label><input id="f_rabpct" type="text" inputmode="decimal" value="" oninput="onRabattProzent()"></div>
+        <div class="field full"><div class="geb-hint" id="rabHint">Aktions-EK oder Rabatt-% eingeben…</div></div>
       </div></fieldset>
 
       <fieldset class="fieldset" style="border:none;padding:0;margin:0 0 20px"><legend>Pfand</legend>
@@ -1523,6 +1549,7 @@ function openProduct(id, prefill){
           <p><b>USt. / Stück</b> — die Umsatzsteuer im Verkaufspreis. Gehört nicht dir, wird ans Finanzamt abgeführt.</p>
           <p><b>Marge</b> — Anteil des Gewinns am Netto-Verkaufspreis (Handelsspanne). Gewinn ÷ VK netto.</p>
           <p><b>Aufschlag a. EK</b> — wie viel % du auf den Einkauf draufschlägst. Gewinn ÷ EK netto. Entspricht eurer „Soll-Marge".</p>
+          <p><b>Aktions-EK / Rabatt</b> — der Preis, den du diesmal wirklich gezahlt hast. Der <b>Preisvorschlag</b> rechnet weiter mit dem regulären Rohpreis, damit der Automatenpreis stabil bleibt. Gewinn, Marge und der Warenverderb-Wert rechnen mit dem tatsächlich gezahlten Preis.</p>
         </div>
       </details>
 
@@ -1533,6 +1560,7 @@ function openProduct(id, prefill){
     </div>`;
   showModal();
   if($('f_geb') && $('f_geb').checked){ const rf=$('f_roh'); if(rf){ rf.readOnly=true; rf.style.opacity='.6'; } const rh=$('rohHint'); if(rh) rh.textContent='wird aus Gebinde berechnet'; }
+  if($('f_rabakt') && $('f_rabakt').checked) syncRabattProzent();   // % aus gespeichertem Aktions-EK ableiten
   liveCalc();
   // Desktop: direkt lostippen können. Mobil bewusst nicht (Tastatur würde das Sheet verdecken).
   if(isNew && window.matchMedia('(min-width:861px)').matches){ const nf=$('f_name'); if(nf) nf.focus(); }
@@ -1554,7 +1582,9 @@ function readForm(){
     beliebtheit:$('f_bel').value,
     gebinde_aktiv:$('f_geb')?$('f_geb').checked:false,
     gebinde_preis:$('f_gebpreis')&&$('f_gebpreis').value.trim()!==''?num($('f_gebpreis').value):'',
-    gebinde_stueck:$('f_gebstk')&&$('f_gebstk').value.trim()!==''?num($('f_gebstk').value):''
+    gebinde_stueck:$('f_gebstk')&&$('f_gebstk').value.trim()!==''?num($('f_gebstk').value):'',
+    rabatt_aktiv:$('f_rabakt')?$('f_rabakt').checked:false,
+    rohpreis_aktion:$('f_rohakt')&&$('f_rohakt').value.trim()!==''?num($('f_rohakt').value):''
   };
 }
 /* MHD-Toggle: an = Produkt hat ein MHD (Feld sichtbar + Pflicht),
@@ -1566,6 +1596,37 @@ function toggleHasMhd(){
   if(!hasMhd){ const inp=$('f_mhd'); if(inp) inp.value=''; }
 }
 function togglePfand(){ const on=$('f_pfandakt').checked; $('pfandBox').style.display=on?'grid':'none'; liveCalc(); }
+/* Rabattierter Einkauf: an = Aktions-EK-Felder sichtbar. Aus = Feld leeren,
+   damit ein deaktivierter Rabatt nie versehentlich weiterrechnet. */
+function toggleRabatt(){
+  const on=$('f_rabakt').checked;
+  const box=$('rabBox'); if(box) box.style.display = on?'grid':'none';
+  if(!on){ const a=$('f_rohakt'); if(a) a.value=''; const b=$('f_rabpct'); if(b) b.value=''; }
+  else { syncRabattProzent(); }
+  liveCalc();
+}
+/* € eingetippt -> Prozent nachziehen. */
+function onRabattEuro(){ syncRabattProzent(); liveCalc(); }
+/* Prozent eingetippt -> € berechnen (auf Basis des regulären Rohpreises). */
+function onRabattProzent(){
+  const roh=num($('f_roh')?$('f_roh').value:0);
+  const pctRaw=$('f_rabpct')?$('f_rabpct').value.trim():'';
+  const a=$('f_rohakt');
+  if(a && pctRaw!=='' && roh>0){
+    const pct=num(pctRaw);
+    const eff=roh*(1-pct/100);
+    a.value=(Math.round(eff*10000)/10000).toString().replace('.',',');
+  } else if(a && pctRaw===''){ a.value=''; }
+  liveCalc();
+}
+/* Prozentfeld aus dem aktuellen €-Wert ableiten (ohne den Nutzer zu überschreiben, während er tippt). */
+function syncRabattProzent(){
+  const roh=num($('f_roh')?$('f_roh').value:0);
+  const eff=num($('f_rohakt')?$('f_rohakt').value:0);
+  const pf=$('f_rabpct'); if(!pf) return;
+  if(roh>0 && eff>0){ const pct=(1-eff/roh)*100; pf.value=(Math.round(pct*10)/10).toString().replace('.',','); }
+  else pf.value='';
+}
 function toggleGebinde(){
   const on=$('f_geb').checked;
   $('gebBox').style.display = on?'grid':'none';
@@ -1591,16 +1652,34 @@ function liveCalc(){
   applyGebinde();                       // ggf. Rohpreis/Stück aktualisieren (vor readForm)
   const p = readForm();
   const c = rechnePreis(p);
+  // Hinweiszeile unter den Rabattfeldern
+  const rh=$('rabHint');
+  if(rh){
+    if(c.rabattAktiv && c.ekBruttoReg>0)
+      rh.innerHTML = `<b>${eur(c.ekBrutto)} €</b> statt ${eur(c.ekBruttoReg)} € brutto &nbsp;·&nbsp; <b>${c.rabattProzent.toFixed(1).replace('.',',')} %</b> günstiger`;
+    else rh.textContent='Aktions-EK oder Rabatt-% eingeben…';
+  }
   $('calcBox').innerHTML = `<div class="calc-grid">
+    ${c.rabattAktiv?`
+    <div class="calc-row"><span>EK netto regulär</span><b style="opacity:.65">${eur(c.ekNettoReg)} €</b></div>
+    <div class="calc-row"><span>EK brutto regulär</span><b style="opacity:.65">${eur(c.ekBruttoReg)} €</b></div>
+    <div class="calc-row"><span>EK netto <b style="color:var(--acc)">aktuell</b></span><b class="pos">${eur(c.ekNetto)} €</b></div>
+    <div class="calc-row"><span>EK brutto <b style="color:var(--acc)">aktuell</b></span><b class="pos">${eur(c.ekBrutto)} €</b></div>`:`
     <div class="calc-row"><span>EK netto</span><b>${eur(c.ekNetto)} €</b></div>
-    <div class="calc-row"><span>EK brutto</span><b>${eur(c.ekBrutto)} €</b></div>
+    <div class="calc-row"><span>EK brutto</span><b>${eur(c.ekBrutto)} €</b></div>`}
     <div class="calc-row"><span>VK netto</span><b>${eur(c.vkNetto)} €</b></div>
     <div class="calc-row"><span>Verkaufspreis</span><b>${eur(c.vkBrutto)} €</b></div>
+    ${c.rabattAktiv?`
+    <div class="calc-row"><span>Gewinn regulär</span><b style="opacity:.65">${eur(c.gewinnReg)} €</b></div>
+    <div class="calc-row"><span>Gewinn <b style="color:var(--acc)">aktuell</b></span><b class="${c.gewinn>=0?'pos':'neg'}">${eur(c.gewinn)} €</b></div>`:`
     <div class="calc-row"><span>Gewinn / Stück</span><b class="${c.gewinn>=0?'pos':'neg'}">${eur(c.gewinn)} €</b></div>
-    <div class="calc-row"><span>USt. / Stück</span><b>${eur(c.ustAnteil)} €</b></div>
+    <div class="calc-row"><span>USt. / Stück</span><b>${eur(c.ustAnteil)} €</b></div>`}
     <div class="calc-row"><span>Marge</span><b class="${c.margeNetto>=0?'pos':'neg'}">${c.margeNetto.toFixed(0)} %</b></div>
     <div class="calc-row"><span>Aufschlag a. EK</span><b class="${c.aufschlag>=num(p.marge_soll)-0.5?'pos':''}">${c.aufschlag.toFixed(0)} %</b></div>
+    ${c.rabattAktiv?`<div class="calc-row"><span>USt. / Stück</span><b>${eur(c.ustAnteil)} €</b></div>
+    <div class="calc-bonus"><span>Zusatzgewinn durch Rabatt</span><b>+${eur(c.zusatzGewinn)} € / Stück</b></div>`:''}
     <div class="calc-hero"><span class="lbl">Preisvorschlag (aufgerundet)</span><span class="val">${eur(c.gerundet)} €</span></div>
+    ${c.rabattAktiv?`<div class="calc-row" style="grid-column:1/-1;color:var(--txt3);font-size:12px">Vorschlag basiert bewusst auf dem <b>regulären</b> Rohpreis — der Verkaufspreis bleibt stabil.</div>`:''}
     ${c.abweichung?`<div class="calc-row" style="grid-column:1/-1;color:var(--warn)">⚠ Verkaufspreis ${eur(c.vkBrutto)} € liegt unter dem Vorschlag ${eur(c.gerundet)} €</div>`:''}
   </div>`;
 }
@@ -2447,31 +2526,33 @@ function exportProductsXlsx(){
     [settings.inhaber_name||''],
     ['Produktliste · Stand '+new Date().toLocaleDateString('de-DE')],
     [],
-    ['Produkt','Kategorie','EAN','EK netto','EK brutto','MwSt. [%]','Soll-Marge [%]','Verkaufspreis','Gewinn/Stück','Marge [%]','Aufschlag [%]','MHD','Pfand']
+    ['Produkt','Kategorie','EAN','EK netto','EK brutto','EK netto regulär','Rabatt [%]','MwSt. [%]','Soll-Marge [%]','Verkaufspreis','Gewinn/Stück','Marge [%]','Aufschlag [%]','MHD','Pfand']
   ];
   const headRows=aoa.length;
   rows.forEach(p=>{
     const c=rechnePreis(p);
     aoa.push([
       p.name||'', p.kategorie||'', String(p.ean||''),
-      r4(c.ekNetto), r2(c.ekBrutto), num(p.mwst_ek||settings.default_mwst),
+      r4(c.ekNetto), r2(c.ekBrutto),
+      c.rabattAktiv?r4(c.ekNettoReg):'', c.rabattAktiv?Math.round(c.rabattProzent):'',
+      num(p.mwst_ek||settings.default_mwst),
       num(p.marge_soll||settings.default_marge), r2(c.verkauf), r2(c.gewinn),
       Math.round(c.margeNetto), Math.round(c.aufschlag),
       parseDateLoose(p.mhd)||(p.mhd||''), p.pfand_aktiv?r2(num(p.pfand_betrag)):''
     ]);
   });
   const ws=XLSX.utils.aoa_to_sheet(aoa,{cellDates:true});
-  ws['!cols']=[{wch:34},{wch:16},{wch:15},{wch:11},{wch:11},{wch:10},{wch:13},{wch:14},{wch:13},{wch:10},{wch:12},{wch:12},{wch:9}];
+  ws['!cols']=[{wch:34},{wch:16},{wch:15},{wch:11},{wch:11},{wch:15},{wch:11},{wch:10},{wch:13},{wch:14},{wch:13},{wch:10},{wch:12},{wch:12},{wch:9}];
   const EUR='#,##0.00\\ "€"', PCT='0\\ "%"';
-  const lastCol=12, lastRow=aoa.length-1;
-  const EURCOLS=new Set([3,4,7,8,12]), PCTCOLS=new Set([5,6,9,10]);
+  const lastCol=14, lastRow=aoa.length-1;
+  const EURCOLS=new Set([3,4,5,9,10,14]), PCTCOLS=new Set([6,7,8,11,12]);
   const NUMCOLS=new Set([3,4,5,6,7,8,9,10,12]);
   for(let r=headRows;r<=lastRow;r++){
     for(let c=0;c<=lastCol;c++){
       const cell=ws[XLSX.utils.encode_cell({r,c})]; if(!cell) continue;
       if(EURCOLS.has(c)) cell.z=EUR;
       else if(PCTCOLS.has(c)) cell.z=PCT;
-      else if(c===11 && cell.t==='d') cell.z='dd.mm.yyyy';
+      else if(c===13 && cell.t==='d') cell.z='dd.mm.yyyy';
       cell.s={alignment:{horizontal:NUMCOLS.has(c)?'center':'left',vertical:'center'}};
     }
   }
