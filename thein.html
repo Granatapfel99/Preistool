@@ -285,6 +285,7 @@ body{overscroll-behavior-y:contain}
 .calc-row b{font-family:var(--mono);font-weight:600;font-size:14px}
 .calc-bonus{grid-column:1/-1;margin-top:6px;padding:9px 11px;background:rgba(74,222,94,.12);border:1px solid var(--acc-dim);border-radius:var(--radius-sm);display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:13px}
 .calc-bonus b{color:var(--acc);font-family:var(--mono)}
+.calc-note{grid-column:1/-1;font-size:12px;line-height:1.5;color:var(--txt3);margin-top:2px}
 .calc-bonus.is-minus{background:var(--warn-bg);border-color:var(--warn)}
 .calc-bonus.is-minus b{color:var(--warn)}
 .rab-lead{font-size:12.5px;line-height:1.55;color:var(--txt2);background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 12px}
@@ -1720,7 +1721,7 @@ function liveCalc(){
       ? `<div class="calc-bonus"><span>Zusatzgewinn durch Rabatt</span><b>+${eur(c.zusatzGewinn)} € / Stück</b></div>`
       : `<div class="calc-bonus is-minus"><span>Mehrkosten ggü. Normalpreis</span><b>${eur(c.zusatzGewinn)} € / Stück</b></div>`}`:''}
     <div class="calc-hero"><span class="lbl">Preisvorschlag (aufgerundet)</span><span class="val">${eur(c.gerundet)} €</span></div>
-    ${c.rabattAktiv?`<div class="calc-row" style="grid-column:1/-1;color:var(--txt3);font-size:12px">Alle Werte rechnen mit dem <b>tatsächlich gezahlten</b> Rohpreis. Der Normalpreis dient nur zum Vergleich.</div>`:''}
+    ${c.rabattAktiv?`<div class="calc-note">Alle Werte rechnen mit dem tatsächlich gezahlten Rohpreis. Der Normalpreis dient nur zum Vergleich.</div>`:''}
     ${c.abweichung?`<div class="calc-row" style="grid-column:1/-1;color:var(--warn)">⚠ Verkaufspreis ${eur(c.vkBrutto)} € liegt unter dem Vorschlag ${eur(c.gerundet)} €</div>`:''}
   </div>`;
 }
