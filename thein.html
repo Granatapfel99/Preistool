@@ -947,8 +947,8 @@ function rechnePreis(p){
   if((p.netto_brutto||'brutto') === 'brutto'){ ekBrutto = roh; ekNetto = roh/(1+mwstEk/100); }
   else { ekNetto = roh; ekBrutto = roh*(1+mwstEk/100); }
 
-  // Normalpreis (optional) = Listenpreis ohne Rabatt. Nur Basis für den Preisvorschlag,
-  // damit der Automatenpreis stabil bleibt, wenn mal günstiger eingekauft wird.
+  // Normalpreis (optional) = Listenpreis ohne Rabatt. Reine Vergleichsanzeige:
+  // zeigt, wie viel gespart wurde. Fließt NICHT in Vorschlag/Gewinn ein.
   const rabattAktiv = !!p.rabatt_aktiv && p.normalpreis!=null && p.normalpreis!=='' && num(p.normalpreis)>0;
   const rohNorm = rabattAktiv ? num(p.normalpreis) : roh;
   let ekNettoReg, ekBruttoReg;
@@ -960,8 +960,9 @@ function rechnePreis(p){
 
   const margeSoll = num(p.marge_soll ?? settings.default_marge);
   const mwstVk = num(p.mwst_vk ?? mwstEk);
-  // Preisvorschlag bewusst aus dem REGULÄREN EK.
-  const wunschNetto  = ekNettoReg*(1+margeSoll/100);
+  // Preisvorschlag rechnet mit dem TATSÄCHLICH GEZAHLTEN EK.
+  // Der Normalpreis ist reine Vergleichsanzeige und fließt hier bewusst NICHT ein.
+  const wunschNetto  = ekNetto*(1+margeSoll/100);
   const wunschBrutto = wunschNetto*(1+mwstVk/100) + pfand;
 
   // AUFrunden auf Rundungsstufe (1e-9 fängt Float-Ungenauigkeit ab).
@@ -1524,7 +1525,7 @@ function openProduct(id, prefill){
       </div>
       <div class="inline-toggle" style="margin-top:12px"><label class="switch"><input type="checkbox" id="f_rabakt" ${p.rabatt_aktiv?'checked':''} onchange="toggleRabatt()"><span class="slider"></span></label><span>Rabattiert eingekauft</span></div>
       <div class="fgrid" id="rabBox" style="display:${p.rabatt_aktiv?'grid':'none'};margin-top:12px">
-        <div class="field full"><div class="rab-lead">Der Rohpreis oben bleibt der Preis, den du <b>bezahlt</b> hast. Trag hier ein, was der Artikel <b>normalerweise</b> kostet.</div></div>
+        <div class="field full"><div class="rab-lead">Nur zur Information — gerechnet wird weiter mit dem <b>bezahlten</b> Rohpreis oben. Trag hier ein, was der Artikel <b>normalerweise</b> kostet.</div></div>
         <div class="field"><label>Normalpreis (€) <span class="hint">ohne Rabatt</span></label><input id="f_normal" type="text" inputmode="decimal" value="${g('normalpreis','')}" oninput="onNormalpreis()"></div>
         <div class="field"><label>Rabatt (%) <span class="hint">alternativ</span></label><input id="f_rabpct" type="text" inputmode="decimal" value="" oninput="onRabattProzent()"></div>
         <div class="field full"><div class="geb-hint" id="rabHint">Normalpreis oder Rabatt-% eingeben…</div></div>
@@ -1572,7 +1573,7 @@ function openProduct(id, prefill){
           <p><b>USt. / Stück</b> — die Umsatzsteuer im Verkaufspreis. Gehört nicht dir, wird ans Finanzamt abgeführt.</p>
           <p><b>Marge</b> — Anteil des Gewinns am Netto-Verkaufspreis (Handelsspanne). Gewinn ÷ VK netto.</p>
           <p><b>Aufschlag a. EK</b> — wie viel % du auf den Einkauf draufschlägst. Gewinn ÷ EK netto. Entspricht eurer „Soll-Marge".</p>
-          <p><b>Rabattiert eingekauft / Normalpreis</b> — der <b>Rohpreis</b> ist immer das, was du wirklich gezahlt hast; damit rechnen Gewinn, Marge und der Warenverderb-Wert. Der <b>Normalpreis</b> ist nur die Vergleichsbasis: Er hält den <b>Preisvorschlag</b> stabil, damit der Automatenpreis nicht sinkt, nur weil du mal günstiger eingekauft hast.</p>
+          <p><b>Rabattiert eingekauft / Normalpreis</b> — gerechnet wird <b>immer</b> mit dem Rohpreis, also dem Preis, den du wirklich gezahlt hast: Preisvorschlag, Gewinn, Marge und der Warenverderb-Wert. Der <b>Normalpreis</b> ändert keine Berechnung, er zeigt dir nur zum Vergleich, wie viel du gespart hast und wie viel Zusatzgewinn dadurch entsteht.</p>
         </div>
       </details>
 
@@ -1719,7 +1720,7 @@ function liveCalc(){
       ? `<div class="calc-bonus"><span>Zusatzgewinn durch Rabatt</span><b>+${eur(c.zusatzGewinn)} € / Stück</b></div>`
       : `<div class="calc-bonus is-minus"><span>Mehrkosten ggü. Normalpreis</span><b>${eur(c.zusatzGewinn)} € / Stück</b></div>`}`:''}
     <div class="calc-hero"><span class="lbl">Preisvorschlag (aufgerundet)</span><span class="val">${eur(c.gerundet)} €</span></div>
-    ${c.rabattAktiv?`<div class="calc-row" style="grid-column:1/-1;color:var(--txt3);font-size:12px">Vorschlag basiert bewusst auf dem <b>Normalpreis</b> — der Verkaufspreis bleibt stabil.</div>`:''}
+    ${c.rabattAktiv?`<div class="calc-row" style="grid-column:1/-1;color:var(--txt3);font-size:12px">Alle Werte rechnen mit dem <b>tatsächlich gezahlten</b> Rohpreis. Der Normalpreis dient nur zum Vergleich.</div>`:''}
     ${c.abweichung?`<div class="calc-row" style="grid-column:1/-1;color:var(--warn)">⚠ Verkaufspreis ${eur(c.vkBrutto)} € liegt unter dem Vorschlag ${eur(c.gerundet)} €</div>`:''}
   </div>`;
 }
