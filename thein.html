@@ -287,6 +287,8 @@ body{overscroll-behavior-y:contain}
 .calc-bonus b{color:var(--acc);font-family:var(--mono)}
 .calc-bonus.is-minus{background:var(--warn-bg);border-color:var(--warn)}
 .calc-bonus.is-minus b{color:var(--warn)}
+.rab-lead{font-size:12.5px;line-height:1.55;color:var(--txt2);background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 12px}
+.rab-lead b{color:var(--txt)}
 .calc-hero{grid-column:1/-1;border-top:1px solid var(--line);margin-top:5px;padding-top:11px;display:flex;justify-content:space-between;align-items:center;gap:12px}
 .calc-hero .lbl{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--txt2);font-family:var(--mono);min-width:0}
 .calc-hero .val{font-family:var(--mono);font-weight:600;font-size:30px;letter-spacing:-1px;color:var(--acc);white-space:nowrap;flex-shrink:0}
@@ -626,6 +628,22 @@ function localGet(k){ try{ return JSON.parse(localStorage.getItem(k)||'[]'); }ca
 function localSet(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
 function localSettingsObj(){ try{ return JSON.parse(localStorage.getItem('thein_settings')||'{}'); }catch(e){ return {}; } }
 function persist(){ localSet('thein_products', products); localSet('thein_waste', waste); }
+/* Einmalige Migration: In einer Zwischenversion hieß das Zusatzfeld `rohpreis_aktion`
+   und trug den GEZAHLTEN Preis, während `rohpreis` den Normalpreis meinte. Da manche
+   Einträge genau andersherum erfasst wurden, entscheidet die Höhe: Der niedrigere der
+   beiden Werte ist der gezahlte Rohpreis, der höhere der Normalpreis. */
+function migrateRabattFelder(){
+  let changed=false;
+  (products||[]).forEach(p=>{
+    if(p && p.rohpreis_aktion!=null && p.rohpreis_aktion!=='' && (p.normalpreis==null||p.normalpreis==='')){
+      const a=num(p.rohpreis), b=num(p.rohpreis_aktion);
+      if(a>0 && b>0 && a!==b){ p.rohpreis=Math.min(a,b); p.normalpreis=Math.max(a,b); p.rabatt_aktiv=true; }
+      else { p.rabatt_aktiv=false; p.normalpreis=''; }
+      delete p.rohpreis_aktion; changed=true;
+    } else if(p && p.rohpreis_aktion!=null){ delete p.rohpreis_aktion; changed=true; }
+  });
+  if(changed) persist();
+}
 
 /* Theme bleibt pro Gerät (Handy darf dunkel sein, PC hell). */
 function localTheme(){
@@ -922,20 +940,20 @@ function runUndo(){ const fn=_undoFn; _undoFn=null; const t=$('toast'); t.classL
    ===================================================================== */
 function rechnePreis(p){
   const mwstEk = num(p.mwst_ek ?? settings.default_mwst);
+  // Rohpreis = was TATSÄCHLICH gezahlt wurde (unverändert wie in der ganzen App).
+  // Treibt Gewinn, Marge und den Warenverderb-Wert.
   const roh = num(p.rohpreis);
-  // REGULÄRER EK (Listenpreis) -> Basis für Preisvorschlag. Bleibt vom Rabatt unberührt,
-  // damit der Automatenpreis stabil bleibt, auch wenn mal günstiger eingekauft wird.
-  let ekNettoReg, ekBruttoReg;
-  if((p.netto_brutto||'brutto') === 'brutto'){ ekBruttoReg = roh; ekNettoReg = roh/(1+mwstEk/100); }
-  else { ekNettoReg = roh; ekBruttoReg = roh*(1+mwstEk/100); }
-
-  // EFFEKTIVER EK = was tatsächlich gezahlt wurde. Treibt Gewinn/Marge UND den
-  // Warenverderb-Wert (steuerlich zählen die echten Anschaffungskosten).
-  const rabattAktiv = !!p.rabatt_aktiv && p.rohpreis_aktion!=null && p.rohpreis_aktion!=='';
-  const rohEff = rabattAktiv ? num(p.rohpreis_aktion) : roh;
   let ekNetto, ekBrutto;
-  if((p.netto_brutto||'brutto') === 'brutto'){ ekBrutto = rohEff; ekNetto = rohEff/(1+mwstEk/100); }
-  else { ekNetto = rohEff; ekBrutto = rohEff*(1+mwstEk/100); }
+  if((p.netto_brutto||'brutto') === 'brutto'){ ekBrutto = roh; ekNetto = roh/(1+mwstEk/100); }
+  else { ekNetto = roh; ekBrutto = roh*(1+mwstEk/100); }
+
+  // Normalpreis (optional) = Listenpreis ohne Rabatt. Nur Basis für den Preisvorschlag,
+  // damit der Automatenpreis stabil bleibt, wenn mal günstiger eingekauft wird.
+  const rabattAktiv = !!p.rabatt_aktiv && p.normalpreis!=null && p.normalpreis!=='' && num(p.normalpreis)>0;
+  const rohNorm = rabattAktiv ? num(p.normalpreis) : roh;
+  let ekNettoReg, ekBruttoReg;
+  if((p.netto_brutto||'brutto') === 'brutto'){ ekBruttoReg = rohNorm; ekNettoReg = rohNorm/(1+mwstEk/100); }
+  else { ekNettoReg = rohNorm; ekBruttoReg = rohNorm*(1+mwstEk/100); }
 
   // Pfand nur wenn aktiviert; steuerneutraler Durchlaufposten.
   const pfand = p.pfand_aktiv ? num(p.pfand_betrag) : 0;
@@ -1499,16 +1517,17 @@ function openProduct(id, prefill){
           <div class="field full"><div class="geb-hint" id="gebHint">Preis pro Stück wird berechnet…</div></div>
         </div>
         <div class="fgrid">
-        <div class="field"><label>Rohpreis (€) <span class="hint" id="rohHint">pro Stück</span></label><input id="f_roh" type="text" inputmode="decimal" value="${g('rohpreis','')}" oninput="liveCalc()"></div>
+        <div class="field"><label>Rohpreis (€) <span class="hint" id="rohHint">pro Stück — was du gezahlt hast</span></label><input id="f_roh" type="text" inputmode="decimal" value="${g('rohpreis','')}" oninput="liveCalc()"></div>
         <div class="field"><label>Roh ist…</label><select id="f_nb" onchange="liveCalc()"><option value="brutto" ${g('netto_brutto','brutto')==='brutto'?'selected':''}>brutto</option><option value="netto" ${g('netto_brutto')==='netto'?'selected':''}>netto</option></select></div>
         <div class="field"><label>MwSt. Einkauf</label><select id="f_mwstek" onchange="liveCalc()"><option value="7" ${num(g('mwst_ek',settings.default_mwst))==7?'selected':''}>7 %</option><option value="19" ${num(g('mwst_ek',settings.default_mwst))==19?'selected':''}>19 %</option></select></div>
         <div class="field"><label>Soll-Marge (%)</label><input id="f_marge" type="text" inputmode="decimal" value="${g('marge_soll',settings.default_marge)}" oninput="liveCalc()"></div>
       </div>
-      <div class="inline-toggle" style="margin-top:12px"><label class="switch"><input type="checkbox" id="f_rabakt" ${p.rabatt_aktiv?'checked':''} onchange="toggleRabatt()"><span class="slider"></span></label><span>Rabattierter Einkauf</span></div>
+      <div class="inline-toggle" style="margin-top:12px"><label class="switch"><input type="checkbox" id="f_rabakt" ${p.rabatt_aktiv?'checked':''} onchange="toggleRabatt()"><span class="slider"></span></label><span>Rabattiert eingekauft</span></div>
       <div class="fgrid" id="rabBox" style="display:${p.rabatt_aktiv?'grid':'none'};margin-top:12px">
-        <div class="field"><label>Aktions-EK (€) <span class="hint">pro Stück</span></label><input id="f_rohakt" type="text" inputmode="decimal" value="${g('rohpreis_aktion','')}" oninput="onRabattEuro()"></div>
+        <div class="field full"><div class="rab-lead">Der Rohpreis oben bleibt der Preis, den du <b>bezahlt</b> hast. Trag hier ein, was der Artikel <b>normalerweise</b> kostet.</div></div>
+        <div class="field"><label>Normalpreis (€) <span class="hint">ohne Rabatt</span></label><input id="f_normal" type="text" inputmode="decimal" value="${g('normalpreis','')}" oninput="onNormalpreis()"></div>
         <div class="field"><label>Rabatt (%) <span class="hint">alternativ</span></label><input id="f_rabpct" type="text" inputmode="decimal" value="" oninput="onRabattProzent()"></div>
-        <div class="field full"><div class="geb-hint" id="rabHint">Aktions-EK oder Rabatt-% eingeben…</div></div>
+        <div class="field full"><div class="geb-hint" id="rabHint">Normalpreis oder Rabatt-% eingeben…</div></div>
       </div></fieldset>
 
       <fieldset class="fieldset" style="border:none;padding:0;margin:0 0 20px"><legend>Pfand</legend>
@@ -1553,7 +1572,7 @@ function openProduct(id, prefill){
           <p><b>USt. / Stück</b> — die Umsatzsteuer im Verkaufspreis. Gehört nicht dir, wird ans Finanzamt abgeführt.</p>
           <p><b>Marge</b> — Anteil des Gewinns am Netto-Verkaufspreis (Handelsspanne). Gewinn ÷ VK netto.</p>
           <p><b>Aufschlag a. EK</b> — wie viel % du auf den Einkauf draufschlägst. Gewinn ÷ EK netto. Entspricht eurer „Soll-Marge".</p>
-          <p><b>Aktions-EK / Rabatt</b> — der Preis, den du diesmal wirklich gezahlt hast. Der <b>Preisvorschlag</b> rechnet weiter mit dem regulären Rohpreis, damit der Automatenpreis stabil bleibt. Gewinn, Marge und der Warenverderb-Wert rechnen mit dem tatsächlich gezahlten Preis.</p>
+          <p><b>Rabattiert eingekauft / Normalpreis</b> — der <b>Rohpreis</b> ist immer das, was du wirklich gezahlt hast; damit rechnen Gewinn, Marge und der Warenverderb-Wert. Der <b>Normalpreis</b> ist nur die Vergleichsbasis: Er hält den <b>Preisvorschlag</b> stabil, damit der Automatenpreis nicht sinkt, nur weil du mal günstiger eingekauft hast.</p>
         </div>
       </details>
 
@@ -1564,7 +1583,7 @@ function openProduct(id, prefill){
     </div>`;
   showModal();
   if($('f_geb') && $('f_geb').checked){ const rf=$('f_roh'); if(rf){ rf.readOnly=true; rf.style.opacity='.6'; } const rh=$('rohHint'); if(rh) rh.textContent='wird aus Gebinde berechnet'; }
-  if($('f_rabakt') && $('f_rabakt').checked) syncRabattProzent();   // % aus gespeichertem Aktions-EK ableiten
+  if($('f_rabakt') && $('f_rabakt').checked) syncRabattProzent();   // % aus Rohpreis + Normalpreis ableiten
   liveCalc();
   // Desktop: direkt lostippen können. Mobil bewusst nicht (Tastatur würde das Sheet verdecken).
   if(isNew && window.matchMedia('(min-width:861px)').matches){ const nf=$('f_name'); if(nf) nf.focus(); }
@@ -1588,7 +1607,7 @@ function readForm(){
     gebinde_preis:$('f_gebpreis')&&$('f_gebpreis').value.trim()!==''?num($('f_gebpreis').value):'',
     gebinde_stueck:$('f_gebstk')&&$('f_gebstk').value.trim()!==''?num($('f_gebstk').value):'',
     rabatt_aktiv:$('f_rabakt')?$('f_rabakt').checked:false,
-    rohpreis_aktion:$('f_rohakt')&&$('f_rohakt').value.trim()!==''?num($('f_rohakt').value):''
+    normalpreis:$('f_normal')&&$('f_normal').value.trim()!==''?num($('f_normal').value):''
   };
 }
 /* MHD-Toggle: an = Produkt hat ein MHD (Feld sichtbar + Pflicht),
@@ -1600,35 +1619,38 @@ function toggleHasMhd(){
   if(!hasMhd){ const inp=$('f_mhd'); if(inp) inp.value=''; }
 }
 function togglePfand(){ const on=$('f_pfandakt').checked; $('pfandBox').style.display=on?'grid':'none'; liveCalc(); }
-/* Rabattierter Einkauf: an = Aktions-EK-Felder sichtbar. Aus = Feld leeren,
+/* Rabattiert eingekauft: an = Normalpreis-Felder sichtbar. Aus = Felder leeren,
    damit ein deaktivierter Rabatt nie versehentlich weiterrechnet. */
 function toggleRabatt(){
   const on=$('f_rabakt').checked;
   const box=$('rabBox'); if(box) box.style.display = on?'grid':'none';
-  if(!on){ const a=$('f_rohakt'); if(a) a.value=''; const b=$('f_rabpct'); if(b) b.value=''; }
+  if(!on){ const a=$('f_normal'); if(a) a.value=''; const b=$('f_rabpct'); if(b) b.value=''; }
   else { syncRabattProzent(); }
   liveCalc();
 }
-/* € eingetippt -> Prozent nachziehen. */
-function onRabattEuro(){ syncRabattProzent(); liveCalc(); }
-/* Prozent eingetippt -> € berechnen (auf Basis des regulären Rohpreises). */
+/* Normalpreis eingetippt -> Prozent nachziehen. */
+function onNormalpreis(){ syncRabattProzent(); liveCalc(); }
+/* Prozent eingetippt -> Normalpreis berechnen. Der Rohpreis (= gezahlt) bleibt unangetastet:
+   normal = gezahlt / (1 - pct/100). */
 function onRabattProzent(){
   const roh=num($('f_roh')?$('f_roh').value:0);
   const pctRaw=$('f_rabpct')?$('f_rabpct').value.trim():'';
-  const a=$('f_rohakt');
+  const a=$('f_normal');
   if(a && pctRaw!=='' && roh>0){
     const pct=num(pctRaw);
-    const eff=roh*(1-pct/100);
-    a.value=(Math.round(eff*10000)/10000).toString().replace('.',',');
+    if(pct>0 && pct<100){
+      const normal=roh/(1-pct/100);
+      a.value=(Math.round(normal*10000)/10000).toString().replace('.',',');
+    }
   } else if(a && pctRaw===''){ a.value=''; }
   liveCalc();
 }
-/* Prozentfeld aus dem aktuellen €-Wert ableiten (ohne den Nutzer zu überschreiben, während er tippt). */
+/* Prozentfeld aus Rohpreis + Normalpreis ableiten. */
 function syncRabattProzent(){
   const roh=num($('f_roh')?$('f_roh').value:0);
-  const eff=num($('f_rohakt')?$('f_rohakt').value:0);
+  const normal=num($('f_normal')?$('f_normal').value:0);
   const pf=$('f_rabpct'); if(!pf) return;
-  if(roh>0 && eff>0){ const pct=(1-eff/roh)*100; pf.value=(Math.round(pct*10)/10).toString().replace('.',','); }
+  if(roh>0 && normal>0){ const pct=(1-roh/normal)*100; pf.value=(Math.round(pct*10)/10).toString().replace('.',','); }
   else pf.value='';
 }
 function toggleGebinde(){
@@ -1664,30 +1686,30 @@ function liveCalc(){
       const pctTxt=Math.abs(pct).toFixed(1).replace('.',',');
       if(pct >= 0.05){
         rh.style.color=''; rh.style.borderColor='';
-        rh.innerHTML = `<b>${eur(c.ekBrutto)} €</b> statt ${eur(c.ekBruttoReg)} € brutto &nbsp;·&nbsp; <b>${pctTxt} %</b> günstiger`;
+        rh.innerHTML = `Du zahlst <b>${eur(c.ekBrutto)} €</b> statt normal ${eur(c.ekBruttoReg)} € brutto &nbsp;·&nbsp; <b>${pctTxt} % gespart</b>`;
       } else if(pct <= -0.05){
         rh.style.color='var(--warn)'; rh.style.borderColor='var(--warn)';
-        rh.innerHTML = `⚠ <b>${eur(c.ekBrutto)} €</b> statt ${eur(c.ekBruttoReg)} € brutto — das ist <b>${pctTxt} % teurer</b>, kein Rabatt. Rohpreis und Aktions-EK vertauscht?`;
+        rh.innerHTML = `⚠ Der Normalpreis (${eur(c.ekBruttoReg)} € brutto) liegt <b>unter</b> dem gezahlten Rohpreis (${eur(c.ekBrutto)} €). Das ist kein Rabatt — Werte vertauscht?`;
       } else {
         rh.style.color=''; rh.style.borderColor='';
-        rh.innerHTML = `Aktions-EK entspricht dem Rohpreis — kein Rabatt.`;
+        rh.innerHTML = `Normalpreis entspricht dem Rohpreis — kein Rabatt.`;
       }
     }
-    else { rh.style.color=''; rh.style.borderColor=''; rh.textContent='Aktions-EK oder Rabatt-% eingeben…'; }
+    else { rh.style.color=''; rh.style.borderColor=''; rh.textContent='Normalpreis oder Rabatt-% eingeben…'; }
   }
   $('calcBox').innerHTML = `<div class="calc-grid">
     ${c.rabattAktiv?`
-    <div class="calc-row"><span>EK netto regulär</span><b style="opacity:.65">${eur(c.ekNettoReg)} €</b></div>
-    <div class="calc-row"><span>EK brutto regulär</span><b style="opacity:.65">${eur(c.ekBruttoReg)} €</b></div>
-    <div class="calc-row"><span>EK netto <b style="color:var(--acc)">aktuell</b></span><b class="pos">${eur(c.ekNetto)} €</b></div>
-    <div class="calc-row"><span>EK brutto <b style="color:var(--acc)">aktuell</b></span><b class="pos">${eur(c.ekBrutto)} €</b></div>`:`
+    <div class="calc-row"><span>EK netto <b style="color:var(--acc)">gezahlt</b></span><b class="pos">${eur(c.ekNetto)} €</b></div>
+    <div class="calc-row"><span>EK brutto <b style="color:var(--acc)">gezahlt</b></span><b class="pos">${eur(c.ekBrutto)} €</b></div>
+    <div class="calc-row"><span>EK netto normal</span><b style="opacity:.65">${eur(c.ekNettoReg)} €</b></div>
+    <div class="calc-row"><span>EK brutto normal</span><b style="opacity:.65">${eur(c.ekBruttoReg)} €</b></div>`:`
     <div class="calc-row"><span>EK netto</span><b>${eur(c.ekNetto)} €</b></div>
     <div class="calc-row"><span>EK brutto</span><b>${eur(c.ekBrutto)} €</b></div>`}
     <div class="calc-row"><span>VK netto</span><b>${eur(c.vkNetto)} €</b></div>
     <div class="calc-row"><span>Verkaufspreis</span><b>${eur(c.vkBrutto)} €</b></div>
     ${c.rabattAktiv?`
-    <div class="calc-row"><span>Gewinn regulär</span><b style="opacity:.65">${eur(c.gewinnReg)} €</b></div>
-    <div class="calc-row"><span>Gewinn <b style="color:var(--acc)">aktuell</b></span><b class="${c.gewinn>=0?'pos':'neg'}">${eur(c.gewinn)} €</b></div>`:`
+    <div class="calc-row"><span>Gewinn <b style="color:var(--acc)">aktuell</b></span><b class="${c.gewinn>=0?'pos':'neg'}">${eur(c.gewinn)} €</b></div>
+    <div class="calc-row"><span>Gewinn zum Normalpreis</span><b style="opacity:.65">${eur(c.gewinnReg)} €</b></div>`:`
     <div class="calc-row"><span>Gewinn / Stück</span><b class="${c.gewinn>=0?'pos':'neg'}">${eur(c.gewinn)} €</b></div>
     <div class="calc-row"><span>USt. / Stück</span><b>${eur(c.ustAnteil)} €</b></div>`}
     <div class="calc-row"><span>Marge</span><b class="${c.margeNetto>=0?'pos':'neg'}">${c.margeNetto.toFixed(0)} %</b></div>
@@ -1697,7 +1719,7 @@ function liveCalc(){
       ? `<div class="calc-bonus"><span>Zusatzgewinn durch Rabatt</span><b>+${eur(c.zusatzGewinn)} € / Stück</b></div>`
       : `<div class="calc-bonus is-minus"><span>Mehrkosten ggü. Normalpreis</span><b>${eur(c.zusatzGewinn)} € / Stück</b></div>`}`:''}
     <div class="calc-hero"><span class="lbl">Preisvorschlag (aufgerundet)</span><span class="val">${eur(c.gerundet)} €</span></div>
-    ${c.rabattAktiv?`<div class="calc-row" style="grid-column:1/-1;color:var(--txt3);font-size:12px">Vorschlag basiert bewusst auf dem <b>regulären</b> Rohpreis — der Verkaufspreis bleibt stabil.</div>`:''}
+    ${c.rabattAktiv?`<div class="calc-row" style="grid-column:1/-1;color:var(--txt3);font-size:12px">Vorschlag basiert bewusst auf dem <b>Normalpreis</b> — der Verkaufspreis bleibt stabil.</div>`:''}
     ${c.abweichung?`<div class="calc-row" style="grid-column:1/-1;color:var(--warn)">⚠ Verkaufspreis ${eur(c.vkBrutto)} € liegt unter dem Vorschlag ${eur(c.gerundet)} €</div>`:''}
   </div>`;
 }
@@ -2544,7 +2566,7 @@ function exportProductsXlsx(){
     [settings.inhaber_name||''],
     ['Produktliste · Stand '+new Date().toLocaleDateString('de-DE')],
     [],
-    ['Produkt','Kategorie','EAN','EK netto','EK brutto','EK netto regulär','Rabatt [%]','MwSt. [%]','Soll-Marge [%]','Verkaufspreis','Gewinn/Stück','Marge [%]','Aufschlag [%]','MHD','Pfand']
+    ['Produkt','Kategorie','EAN','EK netto','EK brutto','EK netto normal','Rabatt [%]','MwSt. [%]','Soll-Marge [%]','Verkaufspreis','Gewinn/Stück','Marge [%]','Aufschlag [%]','MHD','Pfand']
   ];
   const headRows=aoa.length;
   rows.forEach(p=>{
@@ -3160,7 +3182,7 @@ function scheduleReload(){
   reloadTimer=setTimeout(async()=>{
     // Nicht neu rendern, während der Nutzer in einem offenen Modal arbeitet -> Eingaben schützen.
     if($('overlay') && $('overlay').classList.contains('show')){ reloadTimer=setTimeout(scheduleReload,1500); return; }
-    try{ products=await loadProducts(); waste=await loadWaste(); settings=await loadSettings(); applyTheme(); render(); }catch(e){}
+    try{ products=await loadProducts(); waste=await loadWaste(); settings=await loadSettings(); migrateRabattFelder(); applyTheme(); render(); }catch(e){}
   }, 250);
 }
 function subscribeRealtime(){
@@ -3194,7 +3216,7 @@ window.addEventListener('focus', resumeSync);
 async function manualRefresh(){
   if(!USE_CLOUD) return;
   try{
-    products=await loadProducts(); waste=await loadWaste(); settings=await loadSettings();
+    products=await loadProducts(); waste=await loadWaste(); settings=await loadSettings(); migrateRabattFelder();
     applyTheme(); render(); toast('Aktualisiert');
   }catch(e){ toast('Keine Verbindung — später erneut versuchen'); }
 }
@@ -3297,7 +3319,7 @@ async function doLogout(){ if(USE_CLOUD){ try{ await sb.auth.signOut(); }catch(e
 async function startCloud(){
   setSync('connecting');
   try{
-    products = await loadProducts();
+    products = await loadProducts(); migrateRabattFelder();
     waste    = await loadWaste();
     settings = await loadSettings();
     applyTheme(); render(); setSync('live');
@@ -3316,6 +3338,7 @@ async function init(){
   products = localGet('thein_products');
   waste    = localGet('thein_waste');
   settings = {...DEFAULTS, ...localSettingsObj(), theme:localTheme()};
+  migrateRabattFelder();
   applyTheme(); render();
   // 2) Cloud-Modus: Login erzwingen, danach live laden.
   if(USE_CLOUD){
