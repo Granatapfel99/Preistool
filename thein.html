@@ -385,6 +385,46 @@ tbody tr:hover{background:var(--panel2)}
 .dashkpi.warn .dashkpi-val{color:#ffb44d}
 .dashkpi.bad .dashkpi-val{color:var(--warn)}
 .dashnote{border-radius:var(--radius-sm);padding:11px 14px;font-size:13.5px;margin-bottom:16px}
+/* ---- Task-Inbox ---- */
+.taskbox{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:18px;overflow:hidden}
+.taskbox.empty{padding:14px 16px;font-size:13.5px;color:var(--txt2);display:flex;align-items:center;gap:10px}
+.taskbox.empty svg{width:18px;height:18px;color:var(--acc);flex-shrink:0}
+.taskbox-h{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line)}
+.taskbox-h h3{margin:0;font-size:14px;font-weight:600}
+.taskcount{margin-left:auto;background:var(--bg2);border:1px solid var(--line);border-radius:99px;padding:2px 9px;font-size:12px;font-family:var(--mono);color:var(--txt2)}
+.taskrow{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer}
+.taskrow:last-child{border-bottom:0}
+.taskrow:hover{background:var(--bg2)}
+.taskdot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.taskdot.ok{background:var(--acc)}.taskdot.bad{background:var(--warn)}.taskdot.warn{background:#e8b23a}
+.taskrow-main{flex:1;min-width:0}
+.taskrow-name{font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.taskrow-sub{font-size:12px;color:var(--txt2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.taskrow-act{flex-shrink:0}
+.btn-sm{padding:6px 11px;font-size:12.5px}
+.taskmore{padding:10px 16px;font-size:12.5px;color:var(--txt3)}
+/* ---- Nachfüll-Dialog ---- */
+.nf-prod{font-size:15px;font-weight:600;margin-bottom:14px}
+.nf-sec{background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:13px;margin-bottom:12px}
+.nf-sec-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--txt3);margin-bottom:11px}
+.nf-sec-h span{text-transform:none;letter-spacing:0;font-family:var(--mono);color:var(--txt2)}
+.nf-badge{margin-left:auto;font-size:11.5px;padding:2px 8px;border-radius:99px;text-transform:none;letter-spacing:0}
+.nf-badge.bad{background:var(--warn-bg);color:var(--warn)}
+.nf-badge.ok{background:rgba(74,222,94,.13);color:var(--acc)}
+.nf-hint{font-size:12px;line-height:1.5;color:var(--txt3);margin-top:7px}
+.nf-res{margin-top:10px;padding:10px 12px;border-radius:var(--radius-sm);font-size:13px;line-height:1.5}
+.nf-res.ok{background:rgba(74,222,94,.12);border:1px solid var(--acc-dim);color:var(--txt)}
+.nf-res.ok b{color:var(--acc)}
+.nf-res.bad{background:var(--warn-bg);border:1px solid var(--warn);color:var(--txt)}
+.nf-res.bad b{color:var(--warn)}
+/* ---- Chargen-Historie ---- */
+.chg-list{display:flex;flex-direction:column;gap:7px;margin-top:9px}
+.chg{display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius-sm);font-size:12.5px}
+.chg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.chg-dot.aktiv{background:var(--acc)}.chg-dot.verkauft{background:var(--txt3)}
+.chg-dot.verdorben,.chg-dot.teilverdorben{background:var(--warn)}
+.chg-mhd{font-family:var(--mono)}
+.chg-meta{margin-left:auto;color:var(--txt3);font-size:11.5px;text-align:right}
 .dashnote.bad{background:var(--warn-bg);border:1px solid var(--warn);color:var(--warn)}
 .dashnote.info{background:rgba(91,157,255,.1);border:1px solid var(--blue);color:var(--blue)}
 .dashnote.info:hover{background:rgba(91,157,255,.16)}
@@ -789,7 +829,9 @@ let torchTrack = null;
 let scanHandled = false;            // verhindert Doppel-Auslösung beim Scan
 let editingProductId = null;        // aktuell in der Maske bearbeitetes Produkt (für In-Form-Scan)
 let _catTarget = null;              // Kategorie, die gerade umbenannt/entfernt wird
-let _mhdChangeCtx = null;           // Kontext für MHD-Change-Schutz-Dialog
+let _mhdChangeCtx = null;           // (Alt, ungenutzt — durch Chargen-System ersetzt)
+let _nachfuellCtx = null;           // Kontext für Nachfüll-/Chargen-Dialoge
+let _nachfuellGrund = null;         // gewählter Verderb-Grund im Nachfüll-Dialog
 let _mhdChangeGrund = null;         // gewählter Verderb-Grund im MHD-Change-Dialog
 let _mhdChangeEkBrutto = null;      // vorbefüllter EK-Brutto im MHD-Change-Dialog
 let syncState = USE_CLOUD ? 'connecting' : 'lokal';
@@ -1015,6 +1057,110 @@ function mhdStatus(p){
 function fmtDate(d){ const x=new Date(d); return isNaN(x)?'':x.toLocaleDateString('de-DE'); }
 
 /* =====================================================================
+   CHARGEN — das Herzstück des intelligenten Warenverderbs.
+   ---------------------------------------------------------------------
+   Ein MHD gehört nicht zum Artikel, sondern zur CHARGE. Ein Automatenfach
+   ist physikalisch eine FIFO-Schlange: hinten wird nachgefüllt, vorne
+   verkauft. Genau das bilden wir ab.
+
+   p.charges = [{ id, mhd, menge, rest, ek_netto, ek_brutto, mwst,
+                  am, status, quelle, closed_am, closed_grund }]
+   status: aktiv | verkauft | verdorben | teilverdorben | entfernt
+
+   WICHTIG: p.mhd bleibt als gespiegeltes Feld erhalten (= MHD der
+   ältesten aktiven Charge). Dadurch funktionieren Ampeln, Karten,
+   Verderb-Ansicht und Dashboard unverändert weiter.
+
+   SICHERHEITSPRINZIP: Eine verkaufte Charge darf automatisch geschlossen
+   werden (das erzeugt KEINEN Eintrag — es unterlässt nur einen Fehlalarm).
+   Ein Verderb wird NIEMALS automatisch gebucht, sondern immer vom
+   Menschen bestätigt, weil er steuerliche Abzugswirkung hat.
+   ===================================================================== */
+function chargesOf(p){ return Array.isArray(p && p.charges) ? p.charges : []; }
+/* rest===null heißt „Menge unbekannt" (migrierte Charge) — das ist NICHT 0.
+   Solche Chargen bleiben aktiv, bis der Nutzer die Menge klärt. */
+function hatRest(c){ return c.rest==null || num(c.rest)>0; }
+function aktiveChargen(p){
+  return chargesOf(p).filter(c=>c.status==='aktiv' && hatRest(c))
+    .sort((a,b)=> String(a.am||'').localeCompare(String(b.am||'')));   // FIFO: älteste zuerst
+}
+/* p.mhd spiegelt immer das MHD der ältesten aktiven Charge. */
+function syncProductMhd(p){
+  const akt=aktiveChargen(p);
+  if(akt.length){ const m=mhdISO(akt[0].mhd); if(m) p.mhd=m; }
+  return p;
+}
+/* Append-only Protokoll pro Produkt (auf 120 Einträge begrenzt). */
+function logCharge(p, typ, payload){
+  if(!Array.isArray(p._events)) p._events=[];
+  p._events.push({ t:new Date().toISOString(), typ, ...payload });
+  if(p._events.length>120) p._events=p._events.slice(-120);
+}
+/* Lazy-Migration: Produkte ohne Chargen bekommen beim ersten Anfassen eine
+   Startcharge aus dem bestehenden MHD. Menge unbekannt -> null (ehrlich). */
+function ensureCharge(p){
+  if(chargesOf(p).length) return p;
+  if(p.kein_mhd || !String(p.mhd||'').trim()) return p;
+  const c=rechnePreis(p);
+  p.charges=[{ id:uid(), mhd:mhdISO(p.mhd)||p.mhd, menge:null, rest:null,
+    ek_netto:r4(c.ekNetto), ek_brutto:r2(c.ekBrutto),
+    mwst:num(p.mwst_ek||settings.default_mwst),
+    am:(p._created||new Date().toISOString()), status:'aktiv', quelle:'migration' }];
+  logCharge(p,'CHARGE_MIGRIERT',{mhd:p.charges[0].mhd, hinweis:'Menge unbekannt'});
+  return p;
+}
+/* Abverkaufsschätzung aus der Beliebtheit — nur ein SCHWACHES Signal.
+   Sie darf nie etwas buchen oder schließen, nur einen Vorschlag vorbelegen. */
+const RATE_PRO_TAG = { hoch:3, mittel:1, niedrig:0.3 };
+function schaetzeRest(p, ch){
+  const rate = RATE_PRO_TAG[String(p.beliebtheit||'').toLowerCase()];
+  if(!rate || ch.menge==null) return null;
+  const tage = Math.max(0, Math.floor((Date.now() - new Date(ch.am||Date.now()))/86400000));
+  return Math.max(0, Math.round(num(ch.menge) - rate*tage));
+}
+/* MHD-Vorschlag: mittlere Haltbarkeit früherer Chargen ab heute. */
+function mhdVorschlag(p){
+  const hist=chargesOf(p).filter(c=>c.mhd && c.am);
+  const spans=hist.map(c=>{
+    const m=new Date(mhdISO(c.mhd)), a=new Date(c.am);
+    const d=Math.round((m-a)/86400000);
+    return (isNaN(d)||d<=0)?null:d;
+  }).filter(x=>x!=null);
+  if(!spans.length) return '';
+  const med=spans.sort((a,b)=>a-b)[Math.floor(spans.length/2)];
+  return new Date(Date.now()+med*86400000).toISOString().slice(0,10);
+}
+/* Offene Entscheidungen über alle Produkte — speist die Dashboard-Inbox. */
+function offeneTasks(){
+  const out=[];
+  products.forEach(p=>{
+    if(p.kein_mhd) return;
+    const chs=chargesOf(p);
+    if(chs.length){
+      chs.filter(c=>c.status==='aktiv').forEach(c=>{
+        if(!c.mhd){
+          out.push({typ:'mhd_fehlt', p, ch:c, prio:2,
+            text:`Neue Charge${c.menge!=null?` (${c.menge} Stück)`:''} ohne MHD`});
+          return;
+        }
+        const t=mhdTage(c.mhd);
+        if(t!=null && t<=0 && hatRest(c)){
+          out.push({typ:'verderb', p, ch:c, prio:1, tage:t,
+            text:`MHD ${fmtDate(mhdISO(c.mhd))} überschritten${c.rest!=null?` · ${c.rest} Stück übrig`:''}`});
+        }
+      });
+    } else {
+      const t=mhdTage(p.mhd);
+      if(t!=null && t<=0){
+        out.push({typ:'legacy', p, ch:null, prio:1, tage:t,
+          text:`MHD ${fmtDate(mhdISO(p.mhd))} überschritten — verkauft oder verdorben?`});
+      }
+    }
+  });
+  return out.sort((a,b)=> a.prio-b.prio || (a.tage??0)-(b.tage??0));
+}
+
+/* =====================================================================
    NAVIGATION
    ===================================================================== */
 /* =====================================================================
@@ -1022,6 +1168,15 @@ function fmtDate(d){ const x=new Date(d); return isNaN(x)?'':x.toLocaleDateStrin
    ===================================================================== */
 const APP_VERSION = '2026.08.3';
 const CHANGELOG = [
+  { v:'2026.09', date:'September 2026', changes:[
+    'Chargen statt einem MHD pro Artikel: Jede Nachfüllung ist eine eigene Charge mit eigenem MHD und eigenem Einkaufspreis',
+    'Neuer Button „Nachgefüllt" — eine Frage („wie viele waren übrig?") klärt alles: 0 = verkauft (kein Verderb), Rest = Verderb mit exakter Menge',
+    'Keine Fehlalarme mehr: Verkaufte Chargen verschwinden aus dem Warenverderb, ohne dass etwas gebucht wird',
+    'Neue Übersicht „Zu entscheiden" — alle offenen Punkte an einem Ort, alles vorausgefüllt',
+    'MHD-Vorschlag aus der bisherigen Haltbarkeit des Artikels',
+    'Verderb wird nie automatisch gebucht, sondern immer bestätigt — mit Chargenbezug und Beleg im Kommentar',
+    'Chargen-Historie direkt in der Produktmaske'
+  ]},
   { v:'2026.07', date:'Juli 2026', changes:[
     'Zum Aktualisieren einfach oben runterziehen (Pull-to-Refresh) — lädt frisch aus der Cloud',
     'Roter Zähler am Warenverderb-Tab zeigt sofort, wie viele Produkte abgelaufen sind oder bald ablaufen',
@@ -1177,6 +1332,8 @@ function renderDashboard(){
     ${negativ?`<div class="dashnote bad">⚠ ${negativ} Produkt${negativ===1?'':'e'} mit negativem Gewinn — bitte Preis prüfen.</div>`:''}
     ${unvollstaendig?`<div class="dashnote info" onclick="go('produkte','unvollstaendig')" style="cursor:pointer">${unvollstaendig} Produkt${unvollstaendig===1?'':'e'} unvollständig${ohneEk?` · ${ohneEk} ohne EK-Preis`:''}${ohneMhd?` · ${ohneMhd} ohne MHD`:''} — zum Pflegen antippen.</div>`:''}
 
+    ${renderTaskInbox()}
+
     <div class="dashcols">
       <div class="dashcard">
         <h3>Sorgenkinder <span class="dashcard-sub">schwächste Marge zuerst</span></h3>
@@ -1204,6 +1361,37 @@ function renderDashboard(){
       </div>
     </div>
   `;
+}
+
+/* Task-Inbox: alle offenen Entscheidungen an EINEM Ort, vorausgefüllt.
+   Farbe = Handlungsdruck. Rot = Geld (Verderb), Grün = Routine, Gelb = Klärung. */
+function renderTaskInbox(){
+  const tasks=offeneTasks();
+  if(!tasks.length){
+    return `<div class="taskbox empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+      Nichts zu entscheiden — alle Chargen sind aktuell.</div>`;
+  }
+  const show=tasks.slice(0,8);
+  return `<div class="taskbox">
+    <div class="taskbox-h"><h3>Zu entscheiden</h3><span class="taskcount">${tasks.length}</span></div>
+    ${show.map(t=>{
+      const dot = t.typ==='mhd_fehlt' ? 'ok' : (t.typ==='verderb' ? 'bad' : 'warn');
+      let action='';
+      if(t.typ==='mhd_fehlt') action=`<button class="btn btn-acc btn-sm" onclick="event.stopPropagation();openMhdNachtragen('${t.p.id}','${t.ch.id}')">MHD eintragen</button>`;
+      else if(t.typ==='verderb') action=`<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();openVerderbTask('${t.p.id}','${t.ch.id}')">Prüfen</button>`;
+      else action=`<button class="btn btn-acc btn-sm" onclick="event.stopPropagation();openNachfuellen('${t.p.id}')">Nachgefüllt</button>`;
+      return `<div class="taskrow" onclick="openProduct('${t.p.id}')">
+        <span class="taskdot ${dot}"></span>
+        <div class="taskrow-main">
+          <div class="taskrow-name">${esc(t.p.name||'(ohne Name)')}</div>
+          <div class="taskrow-sub">${esc(t.text)}</div>
+        </div>
+        <div class="taskrow-act">${action}</div>
+      </div>`;
+    }).join('')}
+    ${tasks.length>show.length?`<div class="taskmore">… und ${tasks.length-show.length} weitere</div>`:''}
+  </div>`;
 }
 
 /* ---------- Produkte ---------- */
@@ -1551,6 +1739,20 @@ function openProduct(id, prefill){
       </div></fieldset>
 
       <div class="calc" id="calcBox"></div>
+      ${(!isNew && !p.kein_mhd)?`
+      <div class="nf-sec" style="margin-top:14px">
+        <div class="nf-sec-h">Chargen</div>
+        ${chargesOf(p).length?`<div class="chg-list">${[...chargesOf(p)].reverse().slice(0,6).map(c=>`
+          <div class="chg"><span class="chg-dot ${esc(c.status)}"></span>
+            <span class="chg-mhd">MHD ${esc(fmtDate(mhdISO(c.mhd))||'—')}</span>
+            <span class="chg-meta">${c.menge!=null?`${c.menge} St.`:'Menge unbek.'} · ${esc(
+              c.status==='aktiv'?(c.rest!=null?c.rest+' übrig':'aktiv')
+              :c.status==='verkauft'?'verkauft'
+              :c.status==='teilverdorben'?'teilw. verdorben':'verdorben')}</span>
+          </div>`).join('')}</div>`:`<div class="nf-hint">Noch keine Chargen erfasst.</div>`}
+        <button type="button" class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:11px" onclick="openNachfuellen('${p.id}')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Nachgefüllt</button>
+      </div>`:''}
       ${(!isNew && Array.isArray(p._pricelog) && p._pricelog.length)?`
       <details class="kpi-help">
         <summary>Preisverlauf (${p._pricelog.length})</summary>
@@ -1574,6 +1776,7 @@ function openProduct(id, prefill){
           <p><b>USt. / Stück</b> — die Umsatzsteuer im Verkaufspreis. Gehört nicht dir, wird ans Finanzamt abgeführt.</p>
           <p><b>Marge</b> — Anteil des Gewinns am Netto-Verkaufspreis (Handelsspanne). Gewinn ÷ VK netto.</p>
           <p><b>Aufschlag a. EK</b> — wie viel % du auf den Einkauf draufschlägst. Gewinn ÷ EK netto. Entspricht eurer „Soll-Marge".</p>
+          <p><b>Chargen</b> — jede Nachfüllung ist eine eigene Charge mit eigenem MHD und eigenem Einkaufspreis. Beim Nachfüllen fragt TheIN einmal, wie viele Stück der alten Charge übrig waren: 0 bedeutet verkauft (kein Verderb), alles darüber wird als Verderb mit exakt dieser Menge gebucht. Dadurch verschwinden Fehlalarme, und echter Verderb bleibt belegbar.</p>
           <p><b>Rabattiert eingekauft / Normalpreis</b> — gerechnet wird <b>immer</b> mit dem Rohpreis, also dem Preis, den du wirklich gezahlt hast: Preisvorschlag, Gewinn, Marge und der Warenverderb-Wert. Der <b>Normalpreis</b> ändert keine Berechnung, er zeigt dir nur zum Vergleich, wie viel du gespart hast und wie viel Zusatzgewinn dadurch entsteht.</p>
         </div>
       </details>
@@ -1745,19 +1948,24 @@ function saveProduct(id){
   // mit der alten (verdorbenen) Charge passiert, BEVOR das alte MHD überschrieben wird.
   // Sonst verschwindet die Charge spurlos aus der Ablauf-Überwachung -> kein Steuerabzug.
   // Beide MHDs auf YYYY-MM-DD normalisieren, damit reine Formatunterschiede nicht auslösen.
-  if(id){
+  // Wird bei einem bestehenden Artikel das MHD geändert, ist das faktisch ein
+  // Nachkauf. Statt die alte Charge stumm zu überschreiben, übernehmen wir die
+  // Änderung und leiten in den Nachfüll-Dialog, der die alte Charge sauber
+  // abschließt (verkauft ODER Verderb mit exakter Menge).
+  let routeNachfuellen = null;
+  if(id && !data.kein_mhd){
     const old = products.find(x=>x.id===id);
     if(old && old.mhd && data.mhd){
       const a = mhdISO(old.mhd), b = mhdISO(data.mhd);
-      // Auslösen, sobald sich das MHD ändert UND das alte MHD in der Vergangenheit/heute lag.
-      const t = mhdTage(old.mhd);
-      if(a && b && a !== b && t!=null && t<=0){
-        const st = mhdStatus(old);
-        _mhdChangeCtx = { id, oldMhd: old.mhd, oldStatus: st, oldDays: t, newData: data };
-        showMhdChangeDialog();
-        return;
-      }
+      if(a && b && a !== b) routeNachfuellen = b;
     }
+  }
+  if(routeNachfuellen){
+    const old = products.find(x=>x.id===id);
+    const mhdBehalten = old ? old.mhd : data.mhd;
+    doSaveProduct(id, {...data, mhd: mhdBehalten}, true);   // alles außer MHD speichern
+    setTimeout(()=>openNachfuellen(id, routeNachfuellen), 30);
+    return;
   }
   doSaveProduct(id, data);
 }
@@ -1771,7 +1979,7 @@ function mhdISO(s){
 }
 /* Eigentliches Speichern — herausgezogen, damit der MHD-Schutz-Dialog es aufrufen kann.
    skipRender: true, wenn vorher schon ein Verderb gebucht wurde (vermeidet Doppel-Render). */
-function doSaveProduct(id, data){
+function doSaveProduct(id, data, keepOpen){
   data._updated = new Date().toISOString();   // für „zuletzt geändert"-Sortierung
   let saved;
   if(id){
@@ -1789,12 +1997,12 @@ function doSaveProduct(id, data){
     saved = products[i] = {...prev, ...data, _pricelog:log};
   }
   else  { saved = {id:uid(), _created:new Date().toISOString(), ...data}; products.push(saved); }
-  persist(); closeModal(); render();                       // sofort sichtbar
+  persist(); if(!keepOpen){ closeModal(); render(); }       // sofort sichtbar
   (async()=>{
     if(saved.ean) await learnEan(saved.ean, saved.name);   // Name für diese EAN merken
-    if(USE_CLOUD){ try{ await cloudUpsert('products', saved); toast(id?'Gespeichert':'Produkt angelegt'); }
+    if(USE_CLOUD){ try{ await cloudUpsert('products', saved); if(!keepOpen) toast(id?'Gespeichert':'Produkt angelegt'); }
                    catch(e){ toast('Lokal gespeichert (Cloud-Fehler)'); } }
-    else toast(id?'Gespeichert':'Produkt angelegt');
+    else if(!keepOpen) toast(id?'Gespeichert':'Produkt angelegt');
   })();
 }
 /* Bucht einen Verderb OHNE sofortiges Render/Modal (für Aufrufe aus dem MHD-Dialog). */
@@ -1813,109 +2021,253 @@ function bookWasteSilent(p, grund, extra){
    abgelaufenen Charge passiert? Stil & Felder = Warenverderb-Formular, alles vorbefüllt.
    Menge + Grund + EK-Brutto editierbar, Live-Vorschau des Buchungswerts. So geht für den
    Steuerberater nichts verloren, selbst wenn die Charge nie manuell verbucht wurde. */
-function showMhdChangeDialog(){
-  const ctx=_mhdChangeCtx; if(!ctx) return;
-  const prod = products.find(x=>x.id===ctx.id) || {};
-  const days = Math.abs(ctx.oldDays!=null?ctx.oldDays:(ctx.oldStatus&&ctx.oldStatus.t)||0);
-  const expText = (ctx.oldDays!=null?ctx.oldDays:0) < 0
-    ? `vor ${days} Tag${days===1?'':'en'} abgelaufen`
-    : 'läuft heute ab';
-  const c = rechnePreis(prod);
-  _mhdChangeGrund = 'MHD';                 // sinnvolle Standardauswahl
-  _mhdChangeEkBrutto = r2(c.ekBrutto);     // vorbefüllter EK-Brutto pro Stück
+/* =====================================================================
+   NACHFÜLL-DIALOG — der zentrale Einstiegspunkt.
+   Beantwortet in EINEM Schritt alle drei Fälle:
+     Fall B  alte Charge restlos verkauft  -> still schließen, kein Verderb
+     Fall A  Rest übrig                    -> Verderbsvorschlag über EXAKT den Rest
+     Fall C  MHD nicht gepflegt            -> genau eine Rückfrage mit Vorschlag
+   ===================================================================== */
+function openNachfuellen(pid, prefillMhd){
+  const p=products.find(x=>x.id===pid); if(!p) return;
+  ensureCharge(p);
+  const alt=aktiveChargen(p)[0]||null;
+  const schaetz = alt ? schaetzeRest(p, alt) : null;
+  const restVor = alt ? (schaetz!=null?schaetz:(alt.rest!=null?alt.rest:'')) : '';
+  const neuMhd = prefillMhd || mhdVorschlag(p) || '';
+  const c=rechnePreis(p);
+  _nachfuellCtx={ pid, altId: alt?alt.id:null };
+  _nachfuellGrund='MHD';
+  const altTage = alt ? mhdTage(alt.mhd) : null;
+  const altBadge = altTage==null ? '' :
+    (altTage<0 ? `<span class="nf-badge bad">vor ${Math.abs(altTage)} Tag${Math.abs(altTage)===1?'':'en'} abgelaufen</span>`
+     : altTage===0 ? `<span class="nf-badge bad">läuft heute ab</span>`
+     : `<span class="nf-badge ok">noch ${altTage} Tage haltbar</span>`);
+
   $('modal').innerHTML = `
-    <div class="modal-head"><h2>Alte Charge verbuchen</h2>
-      <button class="x" onclick="cancelMhdChange()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-head"><h2>Nachgefüllt</h2>
+      <button class="x" onclick="closeNachfuellen()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
     <div class="modal-body">
-      <div class="mhdc-note">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
-        <div><b>${esc(prod.name||'Artikel')}</b> wird nachgekauft. Die alte Charge war <b>${esc(expText)}</b> (MHD ${esc(fmtDate(mhdISO(ctx.oldMhd)||ctx.oldMhd))}).<br>
-        Bevor das neue MHD <b>${esc(fmtDate(ctx.newData.mhd))}</b> gespeichert wird: Was ist mit der alten Ware passiert?</div>
-      </div>
+      <div class="nf-prod">${esc(p.name||'(ohne Name)')}</div>
 
-      <div class="fgrid" style="margin-top:16px">
-        <div class="field"><label>Menge (Stück)</label><input id="mhdc_menge" inputmode="numeric" value="1" oninput="mhdChangePreview()"></div>
-        <div class="field"><label>EK-Preis brutto / Stück (€)</label><input id="mhdc_ek" inputmode="decimal" value="${eur(_mhdChangeEkBrutto)}" oninput="mhdChangePreview()"></div>
-      </div>
-
-      <div class="field full" style="margin-top:4px">
-        <label>Grund</label>
-        <div class="grundchips" id="mhdGrundChips">
-          ${VERDERB_KATS.map(k=>`<button type="button" class="grundchip ${k===_mhdChangeGrund?'on':''}" onclick="pickMhdGrund(this,'${esc(k).replace(/'/g,"\\'")}')">${esc(k)}</button>`).join('')}
+      ${alt?`
+      <div class="nf-sec">
+        <div class="nf-sec-h">Alte Charge <span>MHD ${esc(fmtDate(mhdISO(alt.mhd))||'—')}</span>${altBadge}</div>
+        <div class="field"><label>Wie viele Stück waren noch übrig?</label>
+          <input id="nf_rest" inputmode="numeric" value="${restVor}" oninput="nachfuellPreview()" placeholder="0">
         </div>
+        ${schaetz!=null?`<div class="nf-hint">Vorschlag ${schaetz} aus Beliebtheit „${esc(p.beliebtheit||'—')}" geschätzt — bitte prüfen.</div>`:''}
+        <div id="nf_restBox"></div>
+      </div>`:`
+      <div class="nf-sec"><div class="nf-hint">Noch keine Charge hinterlegt — dies wird die erste.</div></div>`}
+
+      <div class="nf-sec">
+        <div class="nf-sec-h">Neue Charge</div>
+        <div class="fgrid">
+          <div class="field"><label>Menge (Stück)</label><input id="nf_menge" inputmode="numeric" value="" placeholder="z.B. 12"></div>
+          <div class="field"><label>MHD <span class="req">*Pflicht</span></label><input id="nf_mhd" type="date" value="${esc(neuMhd)}"></div>
+        </div>
+        ${neuMhd&&!prefillMhd?`<div class="nf-hint">MHD-Vorschlag aus der bisherigen Haltbarkeit dieses Artikels.</div>`:''}
       </div>
 
-      <div class="mhdc-preview" id="mhdcPreview"></div>
-
-      <div class="modal-btnrow" style="margin-top:18px">
-        <button class="btn btn-danger" style="flex:1;justify-content:center" onclick="mhdChangeBookSelected()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6 9 17l-5-5"/></svg>Buchen &amp; MHD speichern</button>
+      <div class="modal-btnrow" style="margin-top:16px">
+        <button class="btn btn-acc" style="flex:1;justify-content:center" onclick="confirmNachfuellen()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6 9 17l-5-5"/></svg>Übernehmen</button>
       </div>
-      <button class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:9px" onclick="mhdChangeSoldOrPrivate()">Wurde verkauft — nur MHD aktualisieren</button>
-      <button class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:7px;opacity:.6;font-size:13px" onclick="mhdChangeForce()">Ohne Eintrag überschreiben</button>
     </div>`;
   showModal();
-  mhdChangePreview();
+  nachfuellPreview();
 }
-/* Live-Vorschau: zeigt den Buchungswert (Menge × EK) netto/brutto. */
-function mhdChangePreview(){
-  const el=$('mhdcPreview'); if(!el) return;
-  const m = num($('mhdc_menge')?$('mhdc_menge').value:1)||0;
-  const ekB = num($('mhdc_ek')?$('mhdc_ek').value:0);
-  const prod = products.find(x=>x.id===(_mhdChangeCtx&&_mhdChangeCtx.id)) || {};
-  const mwst = num(prod.mwst_ek||settings.default_mwst)||19;
-  const ekN = ekB/(1+mwst/100);
-  const gesB = ekB*m, gesN = ekN*m;
-  const priv = _mhdChangeGrund==='Privatentnahme';
-  el.innerHTML = `<div class="mhdc-prev-row"><span>${priv?'Privatentnahme':'Verderb-Wert'} (${m||0} Stück)</span>
-    <b>${eur(gesN)} € netto · ${eur(gesB)} € brutto</b></div>`;
+/* Live-Vorschau: was passiert mit der alten Charge? */
+function nachfuellPreview(){
+  const box=$('nf_restBox'); if(!box) return;
+  const ctx=_nachfuellCtx; if(!ctx) return;
+  const p=products.find(x=>x.id===ctx.pid); if(!p) return;
+  const alt=chargesOf(p).find(c=>c.id===ctx.altId); if(!alt) return;
+  const raw=$('nf_rest')?$('nf_rest').value.trim():'';
+  if(raw===''){ box.innerHTML=`<div class="nf-hint">Bitte Restmenge eintragen (0 = alles verkauft).</div>`; return; }
+  const rest=Math.max(0, Math.round(num(raw)));
+  if(rest===0){
+    box.innerHTML=`<div class="nf-res ok"><b>Alles verkauft.</b> Die alte Charge wird abgeschlossen — kein Verderb, kein Steuereintrag.</div>`;
+    return;
+  }
+  const ekN=num(alt.ek_netto), ekB=num(alt.ek_brutto);
+  box.innerHTML=`
+    <div class="nf-res bad"><b>${rest} Stück verdorben.</b> Wert ${eur(ekN*rest)} € netto · ${eur(ekB*rest)} € brutto</div>
+    <div class="field full" style="margin-top:10px"><label>Grund</label>
+      <div class="grundchips" id="nfGrundChips">
+        ${VERDERB_KATS.map(k=>`<button type="button" class="grundchip ${k===_nachfuellGrund?'on':''}" onclick="pickNachfuellGrund(this,'${esc(k).replace(/'/g,"\\'")}')">${esc(k)}</button>`).join('')}
+      </div></div>`;
 }
-function pickMhdGrund(btn, grund){
-  _mhdChangeGrund = grund;
-  const wrap = document.getElementById('mhdGrundChips'); if(!wrap) return;
-  wrap.querySelectorAll('.grundchip').forEach(c=>c.classList.remove('on'));
+function pickNachfuellGrund(btn, grund){
+  _nachfuellGrund=grund;
+  const w=document.getElementById('nfGrundChips'); if(!w) return;
+  w.querySelectorAll('.grundchip').forEach(c=>c.classList.remove('on'));
   btn.classList.add('on');
-  mhdChangePreview();
 }
-function cancelMhdChange(){ _mhdChangeCtx=null; _mhdChangeGrund=null; _mhdChangeEkBrutto=null; closeModal(); }
-/* Bucht die alte Charge (mit ALTEM MHD, gewählter Menge/EK/Grund) und speichert dann
-   das Produkt mit dem neuen MHD — alles in einem Rutsch, ein Render. */
-function mhdChangeBookSelected(){
-  const ctx=_mhdChangeCtx; if(!ctx) return;
-  const grund=_mhdChangeGrund||'MHD';
-  const prod=products.find(x=>x.id===ctx.id);
-  const m   = num($('mhdc_menge')?$('mhdc_menge').value:1)||1;
-  const ekB = num($('mhdc_ek')?$('mhdc_ek').value:0);
-  const mwst= num((prod&&prod.mwst_ek)||settings.default_mwst)||19;
-  const ekN = ekB/(1+mwst/100);
-  _mhdChangeCtx=null; _mhdChangeGrund=null; _mhdChangeEkBrutto=null;
-  if(!prod){ doSaveProduct(ctx.id, ctx.newData); return; }
-  const c=rechnePreis(prod);
-  const extra = {
-    menge: String(m),
-    ek_brutto: r2(ekB),
-    ek_netto: r4(ekN),
-    mhd: fmtDate(mhdISO(ctx.oldMhd)||ctx.oldMhd),
-    einzelpreis: c.verkauf!=null?r2(c.verkauf):'',
-  };
-  if(grund==='Privatentnahme') extra.private_entnahme = String(m);
-  bookWasteSilent({...prod, mhd: ctx.oldMhd}, grund, extra);   // bucht ohne eigenes Render/Modal
-  doSaveProduct(ctx.id, ctx.newData);                          // speichert + schließt + rendert EINMAL
-  setTimeout(()=>toast(grund==='Privatentnahme'?'Privatentnahme gebucht · MHD aktualisiert':'Alte Charge gebucht ('+grund+') · MHD aktualisiert'), 60);
+function closeNachfuellen(){ _nachfuellCtx=null; _nachfuellGrund=null; closeModal(); }
+
+/* Übernehmen: alte Charge abschließen (ggf. Verderb buchen), neue Charge anlegen. */
+function confirmNachfuellen(){
+  const ctx=_nachfuellCtx; if(!ctx) return;
+  const p=products.find(x=>x.id===ctx.pid); if(!p) return;
+  const menge=Math.max(0, Math.round(num($('nf_menge')?$('nf_menge').value:0)));
+  const mhdNeu=$('nf_mhd')?$('nf_mhd').value:'';
+  if(!mhdNeu){ toast('Bitte MHD der neuen Charge eintragen'); return; }
+  if(menge<=0){ toast('Bitte Menge der neuen Charge eintragen'); return; }
+
+  const alt=ctx.altId ? chargesOf(p).find(c=>c.id===ctx.altId) : null;
+  let gebucht=null;
+
+  if(alt){
+    const raw=$('nf_rest')?$('nf_rest').value.trim():'';
+    if(raw===''){ toast('Bitte Restmenge der alten Charge eintragen'); return; }
+    const rest=Math.max(0, Math.round(num(raw)));
+    if(rest===0){
+      // Fall B — verkauft. Kein Steuerereignis, nur Protokoll.
+      alt.status='verkauft'; alt.rest=0; alt.closed_am=new Date().toISOString();
+      alt.closed_grund='vollständig verkauft';
+      logCharge(p,'CHARGE_VERKAUFT',{charge:alt.id, mhd:alt.mhd, begruendung:'Restmenge vom Nutzer mit 0 bestätigt'});
+    } else {
+      // Fall A — echter Verderb über exakt die Restmenge, vom Nutzer bestätigt.
+      const grund=_nachfuellGrund||'MHD';
+      alt.status='verdorben'; alt.rest=rest; alt.closed_am=new Date().toISOString();
+      alt.closed_grund=grund;
+      gebucht=bookWasteSilent(p, grund, {
+        menge:String(rest),
+        ek_netto:r4(num(alt.ek_netto)), ek_brutto:r2(num(alt.ek_brutto)),
+        mhd:fmtDate(mhdISO(alt.mhd)||alt.mhd),
+        charge_id:alt.id,
+        kommentar:`Charge vom ${fmtDate(alt.am)} · ${alt.menge!=null?alt.menge+' eingelegt, ':''}${rest} übrig`,
+        ...(grund==='Privatentnahme'?{private_entnahme:String(rest)}:{})
+      });
+      logCharge(p,'VERDERB_GEBUCHT',{charge:alt.id, menge:rest, grund, waste_id:gebucht.id, aktor:'nutzer'});
+    }
+  }
+
+  const c=rechnePreis(p);
+  const neu={ id:uid(), mhd:mhdISO(mhdNeu)||mhdNeu, menge, rest:menge,
+    ek_netto:r4(c.ekNetto), ek_brutto:r2(c.ekBrutto),
+    mwst:num(p.mwst_ek||settings.default_mwst),
+    am:new Date().toISOString(), status:'aktiv', quelle:'manuell' };
+  if(!Array.isArray(p.charges)) p.charges=[];
+  p.charges.push(neu);
+  logCharge(p,'CHARGE_ANGELEGT',{charge:neu.id, mhd:neu.mhd, menge});
+  syncProductMhd(p);
+  p._updated=new Date().toISOString();
+
+  persist(); closeNachfuellen(); render();
+  if(USE_CLOUD) cloudUpsert('products', p).catch(()=>{});
+  toast(gebucht ? `Verderb gebucht · neue Charge (${menge} Stück) angelegt`
+                : `Alte Charge abgeschlossen · neue Charge (${menge} Stück) angelegt`);
 }
-/* „Wurde verkauft" — kein Verderb, nur das neue MHD speichern. */
-function mhdChangeSoldOrPrivate(){
-  const ctx=_mhdChangeCtx; if(!ctx) return;
-  _mhdChangeCtx=null; _mhdChangeGrund=null; _mhdChangeEkBrutto=null;
-  doSaveProduct(ctx.id, ctx.newData);
-  toast('MHD aktualisiert — keine Charge verbucht');
+
+/* Task „MHD fehlt": nur das eine fehlende Feld nachtragen. */
+function openMhdNachtragen(pid, chId){
+  const p=products.find(x=>x.id===pid); if(!p) return;
+  const ch=chargesOf(p).find(c=>c.id===chId); if(!ch) return;
+  _nachfuellCtx={pid, altId:null, mhdOnly:chId};
+  $('modal').innerHTML=`
+    <div class="modal-head"><h2>MHD nachtragen</h2>
+      <button class="x" onclick="closeNachfuellen()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body">
+      <div class="nf-prod">${esc(p.name||'')}</div>
+      <div class="nf-hint" style="margin-bottom:12px">Charge vom ${esc(fmtDate(ch.am))}${ch.menge!=null?` · ${ch.menge} Stück`:''}</div>
+      <div class="field"><label>MHD <span class="req">*Pflicht</span></label>
+        <input id="nfm_mhd" type="date" value="${esc(mhdVorschlag(p)||'')}"></div>
+      <div class="modal-btnrow" style="margin-top:16px">
+        <button class="btn btn-acc" style="flex:1;justify-content:center" onclick="confirmMhdNachtragen()">Speichern</button>
+      </div>
+    </div>`;
+  showModal();
 }
-/* „Ohne Eintrag überschreiben" — bewusst ohne Verderb-Doku. */
-function mhdChangeForce(){
-  const ctx=_mhdChangeCtx; if(!ctx) return;
-  _mhdChangeCtx=null; _mhdChangeGrund=null; _mhdChangeEkBrutto=null;
-  doSaveProduct(ctx.id, ctx.newData);
-  toast('Überschrieben — keine Verderb-Doku angelegt');
+function confirmMhdNachtragen(){
+  const ctx=_nachfuellCtx; if(!ctx||!ctx.mhdOnly) return;
+  const p=products.find(x=>x.id===ctx.pid); if(!p) return;
+  const ch=chargesOf(p).find(c=>c.id===ctx.mhdOnly); if(!ch) return;
+  const v=$('nfm_mhd')?$('nfm_mhd').value:'';
+  if(!v){ toast('Bitte MHD eintragen'); return; }
+  ch.mhd=mhdISO(v)||v;
+  logCharge(p,'MHD_NACHGETRAGEN',{charge:ch.id, mhd:ch.mhd, aktor:'nutzer'});
+  syncProductMhd(p); p._updated=new Date().toISOString();
+  persist(); closeNachfuellen(); render();
+  if(USE_CLOUD) cloudUpsert('products', p).catch(()=>{});
+  toast('MHD gespeichert');
+}
+
+/* Task „Verderb bestätigen": exakte Restmenge, Grund wählen, buchen. */
+function openVerderbTask(pid, chId){
+  const p=products.find(x=>x.id===pid); if(!p) return;
+  const ch=chargesOf(p).find(c=>c.id===chId); if(!ch) return;
+  _nachfuellCtx={pid, altId:chId, verderbOnly:true};
+  _nachfuellGrund='MHD';
+  const rest = ch.rest!=null?ch.rest:(schaetzeRest(p,ch)??1);
+  $('modal').innerHTML=`
+    <div class="modal-head"><h2>Verderb bestätigen</h2>
+      <button class="x" onclick="closeNachfuellen()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="modal-body">
+      <div class="nf-prod">${esc(p.name||'')}</div>
+      <div class="nf-hint" style="margin-bottom:12px">MHD ${esc(fmtDate(mhdISO(ch.mhd)))} · Charge vom ${esc(fmtDate(ch.am))}${ch.menge!=null?` · ${ch.menge} eingelegt`:''}</div>
+      <div class="fgrid">
+        <div class="field"><label>Verdorbene Menge</label><input id="vt_menge" inputmode="numeric" value="${rest}" oninput="verderbTaskPreview()"></div>
+        <div class="field"><label>EK brutto / Stück</label><input id="vt_ek" inputmode="decimal" value="${eur(num(ch.ek_brutto))}" oninput="verderbTaskPreview()"></div>
+      </div>
+      <div class="field full" style="margin-top:4px"><label>Grund</label>
+        <div class="grundchips" id="nfGrundChips">
+          ${VERDERB_KATS.map(k=>`<button type="button" class="grundchip ${k===_nachfuellGrund?'on':''}" onclick="pickNachfuellGrund(this,'${esc(k).replace(/'/g,"\\'")}')">${esc(k)}</button>`).join('')}
+        </div></div>
+      <div id="vt_prev" class="nf-res bad" style="margin-top:12px"></div>
+      <div class="modal-btnrow" style="margin-top:16px">
+        <button class="btn btn-danger" style="flex:1;justify-content:center" onclick="confirmVerderbTask()">Verderb buchen</button>
+      </div>
+      <button class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:9px" onclick="chargeDochVerkauft()">War doch verkauft — kein Verderb</button>
+    </div>`;
+  showModal(); verderbTaskPreview();
+}
+function verderbTaskPreview(){
+  const el=$('vt_prev'); if(!el) return;
+  const m=Math.max(0,Math.round(num($('vt_menge')?$('vt_menge').value:0)));
+  const ekB=num($('vt_ek')?$('vt_ek').value:0);
+  const ctx=_nachfuellCtx; const p=ctx?products.find(x=>x.id===ctx.pid):null;
+  const mwst=num((p&&p.mwst_ek)||settings.default_mwst)||19;
+  el.innerHTML=`<b>${m} Stück</b> · ${eur(ekB/(1+mwst/100)*m)} € netto · ${eur(ekB*m)} € brutto`;
+}
+function confirmVerderbTask(){
+  const ctx=_nachfuellCtx; if(!ctx) return;
+  const p=products.find(x=>x.id===ctx.pid); if(!p) return;
+  const ch=chargesOf(p).find(c=>c.id===ctx.altId); if(!ch) return;
+  const m=Math.max(0,Math.round(num($('vt_menge')?$('vt_menge').value:0)));
+  if(m<=0){ toast('Bitte Menge eintragen'); return; }
+  const ekB=num($('vt_ek')?$('vt_ek').value:0);
+  const mwst=num(p.mwst_ek||settings.default_mwst)||19;
+  const grund=_nachfuellGrund||'MHD';
+  const teil = ch.menge!=null && m<num(ch.menge);
+  ch.status = teil?'teilverdorben':'verdorben';
+  ch.rest=0; ch.closed_am=new Date().toISOString(); ch.closed_grund=grund;
+  const w=bookWasteSilent(p, grund, {
+    menge:String(m), ek_brutto:r2(ekB), ek_netto:r4(ekB/(1+mwst/100)),
+    mhd:fmtDate(mhdISO(ch.mhd)||ch.mhd), charge_id:ch.id,
+    kommentar:`Charge vom ${fmtDate(ch.am)}${ch.menge!=null?` · ${ch.menge} eingelegt`:''}`,
+    ...(grund==='Privatentnahme'?{private_entnahme:String(m)}:{})
+  });
+  logCharge(p,'VERDERB_GEBUCHT',{charge:ch.id, menge:m, grund, waste_id:w.id, aktor:'nutzer'});
+  syncProductMhd(p); p._updated=new Date().toISOString();
+  persist(); closeNachfuellen(); render();
+  if(USE_CLOUD) cloudUpsert('products', p).catch(()=>{});
+  toast(`Verderb gebucht: ${m} × ${esc(p.name||'')}`);
+}
+/* „War doch verkauft" — Charge schließen ohne Verderbseintrag. */
+function chargeDochVerkauft(){
+  const ctx=_nachfuellCtx; if(!ctx) return;
+  const p=products.find(x=>x.id===ctx.pid); if(!p) return;
+  const ch=chargesOf(p).find(c=>c.id===ctx.altId); if(!ch) return;
+  ch.status='verkauft'; ch.rest=0; ch.closed_am=new Date().toISOString();
+  ch.closed_grund='vom Nutzer als verkauft bestätigt';
+  logCharge(p,'CHARGE_VERKAUFT',{charge:ch.id, mhd:ch.mhd, aktor:'nutzer'});
+  syncProductMhd(p); p._updated=new Date().toISOString();
+  persist(); closeNachfuellen(); render();
+  if(USE_CLOUD) cloudUpsert('products', p).catch(()=>{});
+  toast('Charge abgeschlossen — kein Verderb gebucht');
 }
 function delProduct(id){
   const p=products.find(x=>x.id===id);
@@ -2300,6 +2652,7 @@ function renderVerderb(){
                   <div class="exprow-sub">MHD ${fmtDate(p.mhd)} ${expBadge(st)} ${aktionHint} · EK ${eur(c.ekBrutto)} €</div>
                 </div>
                 <div class="exprow-acts">
+                  <button class="btn btn-ghost btn-sm" onclick="openNachfuellen('${p.id}')" title="Neue Charge nachgefüllt — alte Charge sauber abschließen">Nachgefüllt</button>
                   <button class="btn btn-ghost btn-sm" onclick="aktionFor('${p.id}')" title="Aktionspreis setzen — bleibt in Produkten">Aktion</button>
                   <button class="btn btn-ghost btn-sm" onclick="privatFor('${p.id}')" title="Als private Entnahme buchen">Privat</button>
                   <button class="btn btn-danger btn-sm" onclick="verderbFor('${p.id}')" title="Als Warenverderb buchen">Verderb</button>
