@@ -251,10 +251,16 @@ body{overscroll-behavior-y:contain}
   .exprow-acts .btn{flex:1;min-width:0;justify-content:center}
 }
 @media(max-width:560px){
-  /* Vier Buttons passen auf dem Handy nicht nebeneinander -> 2×2-Raster. */
-  .exprow-acts{gap:6px}
-  .exprow-acts .btn{flex:1 1 calc(50% - 3px);white-space:nowrap;padding:8px 6px}
+  /* Vier Buttons passen auf dem Handy nicht nebeneinander -> festes 2×2-Raster.
+     minmax(0,1fr) ist zwingend: normale 1fr-Spalten schrumpfen NICHT unter ihren
+     Inhalt, und .btn hat white-space:nowrap — sonst läuft die Zeile über den Rahmen. */
+  .exprow-acts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;width:100%}
+  .exprow-acts .btn{width:100%;min-width:0;justify-content:center;padding:9px 6px;font-size:12.5px}
+  .exprow{padding:11px;min-width:0}
   .exprow-name{white-space:normal}
+  .explist{min-width:0}
+  /* 22px Innenabstand sind auf 390px Bildschirmbreite zu viel. */
+  .setcard{padding:16px 13px;max-width:100%}
 }
 .katchips{display:flex;flex-wrap:wrap;gap:6px}
 .katcombo{display:flex;gap:7px}
