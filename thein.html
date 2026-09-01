@@ -339,8 +339,11 @@ th.thwrap{white-space:normal}
 td{padding:10px 10px;border-bottom:1px solid var(--line);vertical-align:top}
 tr:last-child td{border-bottom:none}
 tbody tr:hover{background:var(--panel2)}
-.num{font-family:var(--mono);text-align:right;white-space:nowrap}
-.tdel{color:var(--txt3)}
+/* Spaltenkopf und Spalteninhalt teilen sich dieselbe Ausrichtung -> nichts wirkt versetzt. */
+.num{font-family:var(--mono);text-align:center;white-space:nowrap}
+th.num{font-family:inherit;text-align:center}
+th.ctr,td.ctr{text-align:center}
+.tdel{color:var(--txt3);text-align:center}
 .tdel:hover{color:var(--warn)}
 /* Lange Textspalten umbrechen lassen -> kein erzwungenes horizontales Scrollen */
 .tablewrap td.wrap{white-space:normal;word-break:break-word;min-width:120px}
@@ -398,24 +401,6 @@ tbody tr:hover{background:var(--panel2)}
 .dashkpi.warn .dashkpi-val{color:#ffb44d}
 .dashkpi.bad .dashkpi-val{color:var(--warn)}
 .dashnote{border-radius:var(--radius-sm);padding:11px 14px;font-size:13.5px;margin-bottom:16px}
-/* ---- Task-Inbox ---- */
-.taskbox{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:18px;overflow:hidden}
-.taskbox.empty{padding:14px 16px;font-size:13.5px;color:var(--txt2);display:flex;align-items:center;gap:10px}
-.taskbox.empty svg{width:18px;height:18px;color:var(--acc);flex-shrink:0}
-.taskbox-h{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line)}
-.taskbox-h h3{margin:0;font-size:14px;font-weight:600}
-.taskcount{margin-left:auto;background:var(--bg2);border:1px solid var(--line);border-radius:99px;padding:2px 9px;font-size:12px;font-family:var(--mono);color:var(--txt2)}
-.taskrow{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer}
-.taskrow:last-child{border-bottom:0}
-.taskrow:hover{background:var(--bg2)}
-.taskdot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
-.taskdot.ok{background:var(--acc)}.taskdot.bad{background:var(--warn)}.taskdot.warn{background:#e8b23a}
-.taskrow-main{flex:1;min-width:0}
-.taskrow-name{font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.taskrow-sub{font-size:12px;color:var(--txt2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.taskrow-act{flex-shrink:0}
-.btn-sm{padding:6px 11px;font-size:12.5px}
-.taskmore{padding:10px 16px;font-size:12.5px;color:var(--txt3)}
 /* ---- Nachfüll-Dialog ---- */
 .nf-prod{font-size:15px;font-weight:600;margin-bottom:14px}
 .nf-sec{background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:13px;margin-bottom:12px}
@@ -434,12 +419,6 @@ tbody tr:hover{background:var(--panel2)}
 .chg-list{display:flex;flex-direction:column;gap:7px;margin-top:9px}
 .chg{display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius-sm);font-size:12.5px}
 @media(max-width:560px){
-  /* Inbox: Button unter den Text, damit lange Produktnamen nicht gequetscht werden. */
-  .taskrow{flex-wrap:wrap;gap:9px}
-  .taskrow-main{flex:1 1 100%}
-  .taskrow-act{width:100%}
-  .taskrow-act .btn{width:100%;justify-content:center}
-  .taskrow-name{white-space:normal}
   /* Chargen-Zeile: Meta unter das MHD statt daneben. */
   .chg{flex-wrap:wrap;gap:4px 10px}
   .chg-meta{margin-left:0;flex:1 1 100%;text-align:left}
@@ -1154,82 +1133,6 @@ function mhdVorschlag(p){
   const med=spans.sort((a,b)=>a-b)[Math.floor(spans.length/2)];
   return new Date(Date.now()+med*86400000).toISOString().slice(0,10);
 }
-/* Offene Entscheidungen über alle Produkte — speist die Dashboard-Inbox. */
-function offeneTasks(){
-  const out=[];
-  products.forEach(p=>{
-    if(p.kein_mhd) return;
-    const chs=chargesOf(p);
-    if(chs.length){
-      chs.filter(c=>c.status==='aktiv').forEach(c=>{
-        if(!c.mhd){
-          out.push({typ:'mhd_fehlt', p, ch:c, prio:2,
-            text:`Neue Charge${c.menge!=null?` (${c.menge} Stück)`:''} ohne MHD`});
-          return;
-        }
-        const t=mhdTage(c.mhd);
-        if(t!=null && t<=0 && hatRest(c)){
-          out.push({typ:'verderb', p, ch:c, prio:1, tage:t,
-            text:`MHD ${fmtDate(mhdISO(c.mhd))} überschritten${c.rest!=null?` · ${c.rest} Stück übrig`:''}`});
-        }
-      });
-    } else {
-      const t=mhdTage(p.mhd);
-      if(t!=null && t<=0){
-        out.push({typ:'legacy', p, ch:null, prio:1, tage:t,
-          text:`MHD ${fmtDate(mhdISO(p.mhd))} überschritten — verkauft oder verdorben?`});
-      }
-    }
-  });
-  return out.sort((a,b)=> a.prio-b.prio || (a.tage??0)-(b.tage??0));
-}
-
-/* =====================================================================
-   NAVIGATION
-   ===================================================================== */
-/* =====================================================================
-   CHANGELOG — Release-Verlauf für Thomas (neueste zuerst)
-   ===================================================================== */
-const APP_VERSION = '2026.08.3';
-const CHANGELOG = [
-  { v:'2026.09', date:'September 2026', changes:[
-    'Chargen statt einem MHD pro Artikel: Jede Nachfüllung ist eine eigene Charge mit eigenem MHD und eigenem Einkaufspreis',
-    'Neuer Button „Nachgefüllt" — eine Frage („wie viele waren übrig?") klärt alles: 0 = verkauft (kein Verderb), Rest = Verderb mit exakter Menge',
-    'Keine Fehlalarme mehr: Verkaufte Chargen verschwinden aus dem Warenverderb, ohne dass etwas gebucht wird',
-    'Neue Übersicht „Zu entscheiden" — alle offenen Punkte an einem Ort, alles vorausgefüllt',
-    'MHD-Vorschlag aus der bisherigen Haltbarkeit des Artikels',
-    'Verderb wird nie automatisch gebucht, sondern immer bestätigt — mit Chargenbezug und Beleg im Kommentar',
-    'Chargen-Historie direkt in der Produktmaske'
-  ]},
-  { v:'2026.07', date:'Juli 2026', changes:[
-    'Zum Aktualisieren einfach oben runterziehen (Pull-to-Refresh) — lädt frisch aus der Cloud',
-    'Roter Zähler am Warenverderb-Tab zeigt sofort, wie viele Produkte abgelaufen sind oder bald ablaufen',
-    'Die runden Buttons rechts unten gehen beim Runterscrollen aus dem Weg und kommen beim Hochscrollen zurück',
-    'Masken scrollen jetzt sauber: Der Hintergrund bleibt stehen, solange ein Dialog offen ist (gerade auf dem iPhone)',
-    'Speichern-Button klebt in der Produktmaske unten — kein Runterscrollen mehr nötig',
-    'Suchfeld mit ✕ zum schnellen Leeren · Tab-Wechsel startet oben · kein Auto-Zoom mehr beim Antippen von Feldern (iOS)',
-    'Mobil-Feinschliff: Übersicht passt sich sauber an schmale Bildschirme an — nichts läuft mehr über den Rand',
-    'Navigationsleiste, Kopfzeile & Dialoge im iOS-Stil (Milchglas-Effekt, Grabber am Sheet)',
-    'Sorgenkinder-Liste aufgeräumt: Marge rechts auf einen Blick, Warnhinweise kompakt in der Unterzeile',
-    'Sortierung „Zuletzt hinzugefügt" in der Produktliste',
-    'Neuer Schalter „Lange haltbar / kein MHD nötig" — kein Fantasie-Datum mehr für Liquids & Co.',
-    'Preisverlauf pro Produkt: EK-/VK-Änderungen werden mitgeschrieben'
-  ]},
-  { v:'2026.06', date:'Juni 2026', changes:[
-    'Suchfeld im Warenverderb (Name, Grund, Kommentar)',
-    'Rückgängig-Funktion auch beim Umbenennen/Löschen von Kategorien',
-    'Verderbwert wird netto und brutto ausgewiesen',
-    'Schutzabfrage beim MHD-Wechsel: alte Charge wird nicht mehr stillschweigend überschrieben',
-    'Verderb-Dialog mit voller Grund-Auswahl (Chips) direkt beim Nachpflegen'
-  ]},
-  { v:'2026.05', date:'Mai 2026', changes:[
-    'Dashboard-Übersicht mit Kennzahlen & Sorgenkindern',
-    'Mehrfachauswahl: mehrere Produkte gleichzeitig bearbeiten/löschen',
-    'Kategorien anlegen, umbenennen, entfernen',
-    'Produktliste als Excel exportieren'
-  ]}
-];
-
 const NAV = [
   {id:'dashboard', label:'Übersicht', icon:'<rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/>'},
   {id:'produkte', label:'Produkte', icon:'<path d="M3 9h18M9 21V9M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/>'},
@@ -1356,8 +1259,6 @@ function renderDashboard(){
     ${negativ?`<div class="dashnote bad">⚠ ${negativ} Produkt${negativ===1?'':'e'} mit negativem Gewinn — bitte Preis prüfen.</div>`:''}
     ${unvollstaendig?`<div class="dashnote info" onclick="go('produkte','unvollstaendig')" style="cursor:pointer">${unvollstaendig} Produkt${unvollstaendig===1?'':'e'} unvollständig${ohneEk?` · ${ohneEk} ohne EK-Preis`:''}${ohneMhd?` · ${ohneMhd} ohne MHD`:''} — zum Pflegen antippen.</div>`:''}
 
-    ${renderTaskInbox()}
-
     <div class="dashcols">
       <div class="dashcard">
         <h3>Sorgenkinder <span class="dashcard-sub">schwächste Marge zuerst</span></h3>
@@ -1385,37 +1286,6 @@ function renderDashboard(){
       </div>
     </div>
   `;
-}
-
-/* Task-Inbox: alle offenen Entscheidungen an EINEM Ort, vorausgefüllt.
-   Farbe = Handlungsdruck. Rot = Geld (Verderb), Grün = Routine, Gelb = Klärung. */
-function renderTaskInbox(){
-  const tasks=offeneTasks();
-  if(!tasks.length){
-    return `<div class="taskbox empty">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
-      Nichts zu entscheiden — alle Chargen sind aktuell.</div>`;
-  }
-  const show=tasks.slice(0,8);
-  return `<div class="taskbox">
-    <div class="taskbox-h"><h3>Zu entscheiden</h3><span class="taskcount">${tasks.length}</span></div>
-    ${show.map(t=>{
-      const dot = t.typ==='mhd_fehlt' ? 'ok' : (t.typ==='verderb' ? 'bad' : 'warn');
-      let action='';
-      if(t.typ==='mhd_fehlt') action=`<button class="btn btn-acc btn-sm" onclick="event.stopPropagation();openMhdNachtragen('${t.p.id}','${t.ch.id}')">MHD eintragen</button>`;
-      else if(t.typ==='verderb') action=`<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();openVerderbTask('${t.p.id}','${t.ch.id}')">Prüfen</button>`;
-      else action=`<button class="btn btn-acc btn-sm" onclick="event.stopPropagation();openNachfuellen('${t.p.id}')">Nachgefüllt</button>`;
-      return `<div class="taskrow" onclick="openProduct('${t.p.id}')">
-        <span class="taskdot ${dot}"></span>
-        <div class="taskrow-main">
-          <div class="taskrow-name">${esc(t.p.name||'(ohne Name)')}</div>
-          <div class="taskrow-sub">${esc(t.text)}</div>
-        </div>
-        <div class="taskrow-act">${action}</div>
-      </div>`;
-    }).join('')}
-    ${tasks.length>show.length?`<div class="taskmore">… und ${tasks.length-show.length} weitere</div>`:''}
-  </div>`;
 }
 
 /* ---------- Produkte ---------- */
@@ -1768,7 +1638,7 @@ function openProduct(id, prefill){
         <div class="nf-sec-h">Chargen</div>
         ${chargesOf(p).length?`<div class="chg-list">${[...chargesOf(p)].reverse().slice(0,6).map(c=>`
           <div class="chg"><span class="chg-dot ${esc(c.status)}"></span>
-            <span class="chg-mhd">MHD ${esc(fmtDate(mhdISO(c.mhd))||'—')}</span>
+            <span class="chg-mhd">${c.mhd?`MHD ${esc(fmtDate(mhdISO(c.mhd)))}`:`<a onclick="event.stopPropagation();openMhdNachtragen('${p.id}','${c.id}')" style="color:var(--acc);cursor:pointer">MHD nachtragen</a>`}</span>
             <span class="chg-meta">${c.menge!=null?`${c.menge} St.`:'Menge unbek.'} · ${esc(
               c.status==='aktiv'?(c.rest!=null?c.rest+' übrig':'aktiv')
               :c.status==='verkauft'?'verkauft'
@@ -2088,10 +1958,10 @@ function openNachfuellen(pid, prefillMhd){
       <div class="nf-sec">
         <div class="nf-sec-h">Neue Charge</div>
         <div class="fgrid">
-          <div class="field"><label>Menge (Stück)</label><input id="nf_menge" inputmode="numeric" value="" placeholder="z.B. 12"></div>
+          <div class="field"><label>Menge (Stück) <span class="hint">optional</span></label><input id="nf_menge" inputmode="numeric" value="" placeholder="kann leer bleiben"></div>
           <div class="field"><label>MHD <span class="req">*Pflicht</span></label><input id="nf_mhd" type="date" value="${esc(neuMhd)}"></div>
         </div>
-        ${neuMhd&&!prefillMhd?`<div class="nf-hint">MHD-Vorschlag aus der bisherigen Haltbarkeit dieses Artikels.</div>`:''}
+        <div class="nf-hint">${neuMhd&&!prefillMhd?'MHD-Vorschlag aus der bisherigen Haltbarkeit dieses Artikels. ':''}Die Menge ist freiwillig — sie verbessert nur die Doku und den Restmengen-Vorschlag. Fürs Finanzamt zählt allein die verdorbene Menge, die du beim Verderb einträgst.</div>
       </div>
 
       <div class="modal-btnrow" style="margin-top:16px">
@@ -2135,10 +2005,12 @@ function closeNachfuellen(){ _nachfuellCtx=null; _nachfuellGrund=null; closeModa
 function confirmNachfuellen(){
   const ctx=_nachfuellCtx; if(!ctx) return;
   const p=products.find(x=>x.id===ctx.pid); if(!p) return;
-  const menge=Math.max(0, Math.round(num($('nf_menge')?$('nf_menge').value:0)));
+  // Menge ist optional: leer = „unbekannt" (null). Erfundene Zahlen wären für die
+  // steuerliche Doku schlechter als eine ehrliche Leerstelle.
+  const mengeRaw=$('nf_menge')?$('nf_menge').value.trim():'';
+  const menge = mengeRaw==='' ? null : Math.max(0, Math.round(num(mengeRaw)));
   const mhdNeu=$('nf_mhd')?$('nf_mhd').value:'';
   if(!mhdNeu){ toast('Bitte MHD der neuen Charge eintragen'); return; }
-  if(menge<=0){ toast('Bitte Menge der neuen Charge eintragen'); return; }
 
   const alt=ctx.altId ? chargesOf(p).find(c=>c.id===ctx.altId) : null;
   let gebucht=null;
@@ -2170,7 +2042,7 @@ function confirmNachfuellen(){
   }
 
   const c=rechnePreis(p);
-  const neu={ id:uid(), mhd:mhdISO(mhdNeu)||mhdNeu, menge, rest:menge,
+  const neu={ id:uid(), mhd:mhdISO(mhdNeu)||mhdNeu, menge, rest:menge,   // menge=null -> Rest unbekannt
     ek_netto:r4(c.ekNetto), ek_brutto:r2(c.ekBrutto),
     mwst:num(p.mwst_ek||settings.default_mwst),
     am:new Date().toISOString(), status:'aktiv', quelle:'manuell' };
@@ -2182,8 +2054,9 @@ function confirmNachfuellen(){
 
   persist(); closeNachfuellen(); render();
   if(USE_CLOUD) cloudUpsert('products', p).catch(()=>{});
-  toast(gebucht ? `Verderb gebucht · neue Charge (${menge} Stück) angelegt`
-                : `Alte Charge abgeschlossen · neue Charge (${menge} Stück) angelegt`);
+  const mTxt = menge!=null ? ` (${menge} Stück)` : '';
+  toast(gebucht ? `Verderb gebucht · neue Charge${mTxt} angelegt`
+                : `Alte Charge abgeschlossen · neue Charge${mTxt} angelegt`);
 }
 
 /* Task „MHD fehlt": nur das eine fehlende Feld nachtragen. */
@@ -2219,6 +2092,15 @@ function confirmMhdNachtragen(){
   toast('MHD gespeichert');
 }
 
+/* Router für den Verderb-Button in der Ablauf-Überwachung:
+   Hat das Produkt eine abgelaufene Charge, nutzen wir den chargen-genauen Dialog
+   (exakte Restmenge + Chargenbezug). Sonst der bisherige Weg. */
+function verderbSmart(pid){
+  const p=products.find(x=>x.id===pid); if(!p) return verderbFor(pid);
+  const ch=aktiveChargen(p).find(c=>{ const t=mhdTage(c.mhd); return t!=null && t<=0; });
+  if(ch) return openVerderbTask(pid, ch.id);
+  return verderbFor(pid);
+}
 /* Task „Verderb bestätigen": exakte Restmenge, Grund wählen, buchen. */
 function openVerderbTask(pid, chId){
   const p=products.find(x=>x.id===pid); if(!p) return;
@@ -2679,7 +2561,7 @@ function renderVerderb(){
                   <button class="btn btn-ghost btn-sm" onclick="openNachfuellen('${p.id}')" title="Neue Charge nachgefüllt — alte Charge sauber abschließen">Nachgefüllt</button>
                   <button class="btn btn-ghost btn-sm" onclick="aktionFor('${p.id}')" title="Aktionspreis setzen — bleibt in Produkten">Aktion</button>
                   <button class="btn btn-ghost btn-sm" onclick="privatFor('${p.id}')" title="Als private Entnahme buchen">Privat</button>
-                  <button class="btn btn-danger btn-sm" onclick="verderbFor('${p.id}')" title="Als Warenverderb buchen">Verderb</button>
+                  <button class="btn btn-danger btn-sm" onclick="verderbSmart('${p.id}')" title="Als Warenverderb buchen">Verderb</button>
                 </div>
               </div>`;
             }).join('')}
@@ -2687,14 +2569,14 @@ function renderVerderb(){
         </div>`:''}
         ${rws.length?`<div class="tablewrap"><table>
           <colgroup><col><col class="c-name"><col><col><col><col><col><col><col><col class="c-kom"><col></colgroup>
-          <thead><tr><th>Grund</th><th>Warenbezeichnung</th><th>Menge</th><th>Einzelpreis</th><th class="thwrap">MwSt. [%]</th><th>MHD</th><th class="thwrap">Einkaufspreis Brutto</th><th class="thwrap">Einkaufspreis Netto</th><th class="thwrap">privat entnommene Menge</th><th>Kommentar</th><th></th></tr></thead>
+          <thead><tr><th class="ctr">Grund</th><th>Warenbezeichnung</th><th class="num">Menge</th><th class="num">Einzelpreis</th><th class="thwrap num">MwSt. [%]</th><th class="ctr">MHD</th><th class="thwrap num">Einkaufspreis Brutto</th><th class="thwrap num">Einkaufspreis Netto</th><th class="thwrap num">privat entnommene Menge</th><th>Kommentar</th><th></th></tr></thead>
           <tbody>${rws.map(w=>`<tr onclick="openVerderb('${w.id}')" style="cursor:pointer">
-            <td>${grundBadge(w.grund||w.typ)}</td>
+            <td class="ctr">${grundBadge(w.grund||w.typ)}</td>
             <td class="wrap">${esc(w.warenbezeichnung)}</td>
             <td class="num">${esc(w.menge||'')}</td>
             <td class="num">${w.einzelpreis!=null&&w.einzelpreis!==''?eur(w.einzelpreis)+' €':'—'}</td>
             <td class="num">${w.mwst!=null&&w.mwst!==''?w.mwst:'—'}</td>
-            <td>${esc(w.mhd||'—')}</td>
+            <td class="ctr">${esc(w.mhd||'—')}</td>
             <td class="num">${w.ek_brutto!=null&&w.ek_brutto!==''?eur(w.ek_brutto)+' €':'—'}</td>
             <td class="num">${w.ek_netto!=null&&w.ek_netto!==''?eur(w.ek_netto)+' €':'—'}</td>
             <td class="num">${esc(w.private_entnahme||'—')}</td>
