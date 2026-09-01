@@ -246,8 +246,15 @@ body{overscroll-behavior-y:contain}
 .mhdb-priv{background:rgba(74,222,94,.12);color:var(--ok)}
 @media(max-width:860px){
   .exprow{flex-wrap:wrap}
-  .exprow-acts{width:100%}
-  .exprow-acts .btn{flex:1;justify-content:center}
+  .exprow-acts{width:100%;flex-wrap:wrap}
+  /* min-width:0 erlaubt das Schrumpfen — ohne das sprengt der längste Button die Zeile. */
+  .exprow-acts .btn{flex:1;min-width:0;justify-content:center}
+}
+@media(max-width:560px){
+  /* Vier Buttons passen auf dem Handy nicht nebeneinander -> 2×2-Raster. */
+  .exprow-acts{gap:6px}
+  .exprow-acts .btn{flex:1 1 calc(50% - 3px);white-space:nowrap;padding:8px 6px}
+  .exprow-name{white-space:normal}
 }
 .katchips{display:flex;flex-wrap:wrap;gap:6px}
 .katcombo{display:flex;gap:7px}
@@ -420,6 +427,17 @@ tbody tr:hover{background:var(--panel2)}
 /* ---- Chargen-Historie ---- */
 .chg-list{display:flex;flex-direction:column;gap:7px;margin-top:9px}
 .chg{display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--bg2);border:1px solid var(--line);border-radius:var(--radius-sm);font-size:12.5px}
+@media(max-width:560px){
+  /* Inbox: Button unter den Text, damit lange Produktnamen nicht gequetscht werden. */
+  .taskrow{flex-wrap:wrap;gap:9px}
+  .taskrow-main{flex:1 1 100%}
+  .taskrow-act{width:100%}
+  .taskrow-act .btn{width:100%;justify-content:center}
+  .taskrow-name{white-space:normal}
+  /* Chargen-Zeile: Meta unter das MHD statt daneben. */
+  .chg{flex-wrap:wrap;gap:4px 10px}
+  .chg-meta{margin-left:0;flex:1 1 100%;text-align:left}
+}
 .chg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .chg-dot.aktiv{background:var(--acc)}.chg-dot.verkauft{background:var(--txt3)}
 .chg-dot.verdorben,.chg-dot.teilverdorben{background:var(--warn)}
